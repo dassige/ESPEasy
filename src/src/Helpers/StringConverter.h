@@ -1,35 +1,50 @@
 #ifndef HELPERS_STRINGCONVERTER_H
 #define HELPERS_STRINGCONVERTER_H
 
+#include "../../ESPEasy_common.h"
+
 #include <Arduino.h>
 
 #include "../Globals/Plugins.h"
 #include "../Globals/CPlugins.h"
 
 #include "../Helpers/Convert.h"
+#include "../Helpers/StringConverter_Numerical.h"
 
-class IPAddress;
+#include <IPAddress.h>
 
 // -V::569
 
 /********************************************************************************************\
-   Convert a char string to integer
+   Concatenate using code which results in the smallest compiled code
  \*********************************************************************************************/
 
-// FIXME: change original code so it uses String and String.toInt()
-unsigned long str2int(const char *string);
+String concat(const __FlashStringHelper * str, const String &val);
+String concat(const __FlashStringHelper * str, const __FlashStringHelper *val);
 
-String        ull2String(uint64_t value,
-                         uint8_t  base = 10);
+template <typename T>
+String concat(const __FlashStringHelper * str, const T &val) {
+  String res(str);
+  res.concat(val);
+  return res;
+}
 
-String        ll2String(int64_t value,
-                         uint8_t  base = 10);
+template <typename T>
+String concat(const String& str, const T &val) {
+  String res(str);
+  res.concat(val);
+  return res;
+}
 
-/********************************************************************************************\
-   Check if valid float and convert string to float.
- \*********************************************************************************************/
-bool string2float(const String& string,
-                  float       & floatvalue);
+bool equals(const String& str, const __FlashStringHelper * f_str);
+bool equals(const String& str, const char& c);
+
+/*
+template <typename T>
+bool equals(const String& str, const T &val) {
+  return str.equals(String(val));
+}
+*/
 
 
 /********************************************************************************************\
@@ -70,10 +85,22 @@ unsigned long long hexToULL(const String& input_c,
                             size_t        startpos,
                             size_t        nrHexDecimals);
 
+void appendHexChar(uint8_t data, String& string);
+
+// Binary data to HEX
+// Returned string length will be twice the size of the data array.
+String formatToHex_array(const uint8_t* data, size_t size);
+
+String formatToHex(unsigned long value,
+                   const __FlashStringHelper * prefix,
+                   unsigned int minimal_hex_digits);
+
 String formatToHex(unsigned long value,
                    const __FlashStringHelper * prefix);
 
-String formatToHex(unsigned long value);
+String formatToHex(unsigned long value, unsigned int minimal_hex_digits = 0);
+
+String formatToHex_no_prefix(unsigned long value, unsigned int minimal_hex_digits = 0);
 
 String formatHumanReadable(unsigned long value,
                            unsigned long factor);
@@ -93,6 +120,9 @@ const __FlashStringHelper * boolToString(bool value);
    Typical string replace functions.
 \*********************************************************************************************/
 void   removeExtraNewLine(String& line);
+
+// Remove all occurences of given character from the string
+void   removeChar(String& line, char character);
 
 void   addNewLine(String& line);
 
@@ -208,29 +238,72 @@ String to_internal_string(const String& input,
    IndexFind = 1 => command.
     // FIXME TD-er: parseString* should use index starting at 0.
 \*********************************************************************************************/
+String parseString(const char *  string,
+                   uint8_t       indexFind,
+                   char          separator = ',',
+                   bool          trimResult = true);
+
 String parseString(const String& string,
-                   uint8_t          indexFind,
-                   char          separator = ',');
+                   uint8_t       indexFind,
+                   char          separator = ',',
+                   bool          trimResult = true);
 
 String parseStringKeepCase(const String& string,
-                           uint8_t          indexFind,
-                           char          separator = ',');
+                           uint8_t       indexFind,
+                           char          separator = ',',
+                           bool          trimResult = true);
+
+String parseStringKeepCaseNoTrim(const String& string,
+                                 uint8_t       indexFind,
+                                 char          separator = ',');
 
 String parseStringToEnd(const String& string,
-                        uint8_t          indexFind,
-                        char          separator = ',');
+                        uint8_t       indexFind,
+                        char          separator = ',',
+                        bool          trimResult = true);
 
 String parseStringToEndKeepCase(const String& string,
-                                uint8_t          indexFind,
-                                char          separator = ',');
+                                uint8_t       indexFind,
+                                char          separator = ',',
+                                bool          trimResult = true);
+
+String parseStringToEndKeepCaseNoTrim(const String& string,
+                                      uint8_t       indexFind,
+                                      char          separator = ',');
 
 String tolerantParseStringKeepCase(const char * string,
-                                   uint8_t          indexFind,
-                                   char          separator = ',');
+                                   uint8_t      indexFind,
+                                   char         separator = ',',
+                                   bool         trimResult = true);
 
 String tolerantParseStringKeepCase(const String& string,
-                                   uint8_t          indexFind,
-                                   char          separator = ',');
+                                   uint8_t       indexFind,
+                                   char          separator = ',',
+                                   bool          trimResult = true);
+
+String parseHexTextString(const String& argument,
+                          int           index = 2);
+std::vector<uint8_t> parseHexTextData(const String& argument,
+                                      int           index = 2);
+
+
+/*********************************************************************************************\
+   GetTextIndexed: Get text from large PROGMEM stored string
+   Items are separated by a '|'
+   Code (c) Tasmota:
+   https://github.com/arendst/Tasmota/blob/293ae8064d753e6d38488b46d21cdc52a4a6e637/tasmota/tasmota_support/support.ino#L937
+\*********************************************************************************************/
+char* GetTextIndexed(char* destination, size_t destination_size, uint32_t index, const char* haystack);
+
+/*********************************************************************************************\
+   GetCommandCode: Find string in large PROGMEM stored string
+   Items are separated by a '|'
+   Code (c) Tasmota:
+   https://github.com/arendst/Tasmota/blob/293ae8064d753e6d38488b46d21cdc52a4a6e637/tasmota/tasmota_support/support.ino#L967
+\*********************************************************************************************/
+int GetCommandCode(char* destination, size_t destination_size, const char* needle, const char* haystack);
+
+
 
 // escapes special characters in strings for use in html-forms
 bool   htmlEscapeChar(char    c,
@@ -251,6 +324,12 @@ void   repl(const __FlashStringHelper * key,
             bool       useURLencode);
 
 void   repl(const __FlashStringHelper * key,
+            const char* val,
+            String      & s,
+            bool       useURLencode);
+
+void   repl(const __FlashStringHelper * key1,
+             const __FlashStringHelper * key2,
             const char* val,
             String      & s,
             bool       useURLencode);

@@ -13,7 +13,7 @@
 
 #define PLUGIN_084
 #define PLUGIN_ID_084         84
-#define PLUGIN_NAME_084       "UV - VEML6070 [TESTING]"
+#define PLUGIN_NAME_084       "UV - VEML6070"
 #define PLUGIN_VALUENAME1_084 "Raw"
 #define PLUGIN_VALUENAME2_084 "Risk"
 #define PLUGIN_VALUENAME3_084 "Power"
@@ -52,6 +52,7 @@ boolean Plugin_084(uint8_t function, struct EventStruct *event, String& string)
       Device[deviceCount].TimerOption        = true;
       Device[deviceCount].TimerOptional      = false;
       Device[deviceCount].GlobalSyncOption   = true;
+      Device[deviceCount].PluginStats        = true;
       break;
     }
 
@@ -75,6 +76,15 @@ boolean Plugin_084(uint8_t function, struct EventStruct *event, String& string)
       break;
     }
 
+    # if FEATURE_I2C_GET_ADDRESS
+    case PLUGIN_I2C_GET_ADDRESS:
+    {
+      event->Par1 = 0x38;
+      success     = true;
+      break;
+    }
+    # endif // if FEATURE_I2C_GET_ADDRESS
+
     case PLUGIN_WEBFORM_LOAD:
     {
       const __FlashStringHelper * optionsMode[4] = { F("1/2T"), F("1T"), F("2T"), F("4T (Default)") };
@@ -94,13 +104,12 @@ boolean Plugin_084(uint8_t function, struct EventStruct *event, String& string)
 
     case PLUGIN_INIT:
     {
-      bool status = VEML6070_Init(PCONFIG(0));
+      success = VEML6070_Init(PCONFIG(0));
 
-      if (!status) {
+      if (!success) {
         addLog(LOG_LEVEL_INFO, F("VEML6070: Not available!"));
       }
 
-      success = status;
       break;
     }
 

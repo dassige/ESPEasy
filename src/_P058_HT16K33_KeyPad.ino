@@ -31,7 +31,7 @@
 
 #define PLUGIN_058
 #define PLUGIN_ID_058         58
-#define PLUGIN_NAME_058       "Keypad - HT16K33 [TESTING]"
+#define PLUGIN_NAME_058       "Keypad - HT16K33"
 #define PLUGIN_VALUENAME1_058 "ScanCode"
 
 
@@ -85,6 +85,15 @@ boolean Plugin_058(uint8_t function, struct EventStruct *event, String& string)
       break;
     }
 
+    # if FEATURE_I2C_GET_ADDRESS
+    case PLUGIN_I2C_GET_ADDRESS:
+    {
+      event->Par1 = PCONFIG(0);
+      success     = true;
+      break;
+    }
+    # endif // if FEATURE_I2C_GET_ADDRESS
+
     case PLUGIN_WEBFORM_LOAD:
     {
       success = true;
@@ -101,15 +110,11 @@ boolean Plugin_058(uint8_t function, struct EventStruct *event, String& string)
 
     case PLUGIN_INIT:
     {
-      uint8_t address = PCONFIG(0);
-
-      initPluginTaskData(event->TaskIndex, new (std::nothrow) P058_data_struct(address));
+      initPluginTaskData(event->TaskIndex, new (std::nothrow) P058_data_struct(PCONFIG(0)));
       P058_data_struct *P058_data =
         static_cast<P058_data_struct *>(getPluginTaskData(event->TaskIndex));
 
-      if (nullptr != P058_data) {
-        success = true;
-      }
+      success = (nullptr != P058_data);
       break;
     }
 

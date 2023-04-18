@@ -7,12 +7,18 @@
 #include "../WebServer/Markup.h"
 #include "../WebServer/Markup_Buttons.h"
 #include "../WebServer/Markup_Forms.h"
-#include "../WebServer/WebServer.h"
+#include "../WebServer/ESPEasy_WebServer.h"
+
+#ifdef USES_ESPEASY_NOW
+#include "../DataStructs/MAC_address.h"
+#include "../DataStructs/NodeStruct.h"
+#endif
 
 #include "../ESPEasyCore/Controller.h"
 #include "../ESPEasyCore/ESPEasyNetwork.h"
 
 #include "../Globals/MQTT.h"
+#include "../Globals/Nodes.h"
 #include "../Globals/SecuritySettings.h"
 #include "../Globals/Settings.h"
 
@@ -21,9 +27,6 @@
 #include "../Helpers/Networking.h"
 #include "../Helpers/StringConverter.h"
 
-
-
-#include "../DataStructs/MAC_address.h"
 
 // ********************************************************************************
 // Web Interface config page
@@ -52,13 +55,13 @@ void handle_config() {
       addLog(LOG_LEVEL_INFO, F("Unit Name changed."));
 
       if (CPluginCall(CPlugin::Function::CPLUGIN_GOT_INVALID, 0)) { // inform controllers that the old name will be invalid from now on.
-#ifdef USES_MQTT
+#if FEATURE_MQTT
         MQTTDisconnect();                                           // disconnect form MQTT Server if invalid message was sent succesfull.
-#endif // USES_MQTT
+#endif // if FEATURE_MQTT
       }
-#ifdef USES_MQTT
+#if FEATURE_MQTT
       MQTTclient_should_reconnect = true;
-#endif // USES_MQTT
+#endif // if FEATURE_MQTT
     }
 
     // Unit name
@@ -112,17 +115,37 @@ void handle_config() {
         break;
     }
 
+    #ifdef USES_ESPEASY_NOW
+    for (int peer = 0; peer < ESPEASY_NOW_PEER_MAX; ++peer) {
+      String peer_mac = webArg(concat(F("peer"), peer));
+      if (peer_mac.length() == 0) {
+        peer_mac = F("00:00:00:00:00:00");
+      }
+      MAC_address mac;
+      if (mac.set(peer_mac.c_str())) {
+        mac.get(SecuritySettings.EspEasyNowPeerMAC[peer]);
+      }
+      /*
+      String log = F("MAC decoding ");
+      log += peer_mac;
+      log += F(" => ");
+      log += mac.toString();
+      addLog(LOG_LEVEL_INFO, log);
+      */
+    }
+    #endif
+
     Settings.deepSleepOnFail = isFormItemChecked(F("deepsleeponfail"));
     webArg2ip(F("espip"),      Settings.IP);
     webArg2ip(F("espgateway"), Settings.Gateway);
     webArg2ip(F("espsubnet"),  Settings.Subnet);
     webArg2ip(F("espdns"),     Settings.DNS);
-#ifdef HAS_ETHERNET
+#if FEATURE_ETHERNET
     webArg2ip(F("espethip"),      Settings.ETH_IP);
     webArg2ip(F("espethgateway"), Settings.ETH_Gateway);
     webArg2ip(F("espethsubnet"),  Settings.ETH_Subnet);
     webArg2ip(F("espethdns"),     Settings.ETH_DNS);
-#endif
+#endif // if FEATURE_ETHERNET
     addHtmlError(SaveSettings());
   }
 
@@ -134,7 +157,7 @@ void handle_config() {
   Settings.Name[25]             = 0;
   SecuritySettings.Password[25] = 0;
   addFormTextBox(F("Unit Name"), F("name"), Settings.Name, 25);
-  addFormNote(String(F("Hostname: ")) + NetworkCreateRFCCompliantHostname());
+  addFormNote(concat(F("Hostname: "), NetworkCreateRFCCompliantHostname()));
   addFormNumericBox(F("Unit Number"), F("unit"), Settings.Unit, 0, UNIT_NUMBER_MAX);
   addFormCheckBox(F("Append Unit Number to hostname"), F("appendunittohostname"), Settings.appendUnitToHostname());
   addFormPasswordBox(F("Admin Password"), F("password"), SecuritySettings.Password, 25);
@@ -158,11 +181,11 @@ void handle_config() {
   addFormNote(F("When set you can use the Sensor in AP-Mode without being forced to /setup. /setup can still be called."));
 
   addFormCheckBox(F("Do Not Start AP"), F("DoNotStartAP"), Settings.DoNotStartAP());
-  #ifdef HAS_ETHERNET
+  #if FEATURE_ETHERNET
   addFormNote(F("Do not allow to start an AP when unable to connect to configured LAN/WiFi"));
-  #else
+  #else // if FEATURE_ETHERNET
   addFormNote(F("Do not allow to start an AP when configured WiFi cannot be found"));
-  #endif
+  #endif // if FEATURE_ETHERNET
 
 
   // TD-er add IP access box F("ipblocklevel")
@@ -190,7 +213,7 @@ void handle_config() {
   addFormIPBox(F("ESP WiFi DNS"),        F("espdns"),     Settings.DNS);
   addFormNote(F("Leave empty for DHCP"));
 
-#ifdef HAS_ETHERNET
+#if FEATURE_ETHERNET
   addFormSubHeader(F("Ethernet IP Settings"));
 
   addFormIPBox(F("ESP Ethernet IP"),         F("espethip"),      Settings.ETH_IP);
@@ -198,8 +221,26 @@ void handle_config() {
   addFormIPBox(F("ESP Ethernet Subnetmask"), F("espethsubnet"),  Settings.ETH_Subnet);
   addFormIPBox(F("ESP Ethernet DNS"),        F("espethdns"),     Settings.ETH_DNS);
   addFormNote(F("Leave empty for DHCP"));
-#endif
+#endif // if FEATURE_ETHERNET
 
+#ifdef USES_ESPEASY_NOW
+  addFormSubHeader(F("ESPEasy-NOW"));
+  for (int peer = 0; peer < ESPEASY_NOW_PEER_MAX; ++peer) {
+    addFormMACBox(concat(F("Peer "), peer + 1),
+                  concat(F("peer"), peer), 
+                  SecuritySettings.EspEasyNowPeerMAC[peer]);
+
+    bool match_STA;
+    const NodeStruct* nodeInfo = Nodes.getNodeByMac(SecuritySettings.EspEasyNowPeerMAC[peer], match_STA);
+    if (nodeInfo != nullptr)
+    {
+      String summary = nodeInfo->getSummary();
+      summary += match_STA ? F(" (STA)") : F(" (AP)");
+      addFormNote(summary);
+    }
+    
+  }
+#endif
 
   addFormSubHeader(F("Sleep Mode"));
 
@@ -211,10 +252,7 @@ void handle_config() {
   int dsmax = getDeepSleepMax();
   addFormNumericBox(F("Sleep time"), F("delay"), Settings.Delay, 0, dsmax); // limited by hardware
   {
-    String maxSleeptimeUnit = F("sec (max: ");
-    maxSleeptimeUnit += String(dsmax);
-    maxSleeptimeUnit += ')';
-    addUnit(maxSleeptimeUnit);
+    addUnit(concat(F("sec (max: "), dsmax) + ')');
   }
 
   addFormCheckBox(F("Sleep on connection failure"), F("deepsleeponfail"), Settings.deepSleepOnFail);

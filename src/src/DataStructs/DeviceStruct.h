@@ -5,6 +5,8 @@
 #include <Arduino.h>
 #include <vector>
 
+#include "../DataTypes/SensorVType.h"
+
 #define DEVICE_TYPE_SINGLE                  1 // connected through 1 datapin
 #define DEVICE_TYPE_DUAL                    2 // connected through 2 datapins
 #define DEVICE_TYPE_TRIPLE                  3 // connected through 3 datapins
@@ -32,36 +34,12 @@
 #define I2C_FLAGS_MUX_MULTICHANNEL          1 // Allow multiple multiplexer channels when set
 
 
-enum class Sensor_VType : uint8_t {
-  SENSOR_TYPE_NONE            =    0,
-  SENSOR_TYPE_SINGLE          =    1,
-  SENSOR_TYPE_TEMP_HUM        =    2,
-  SENSOR_TYPE_TEMP_BARO       =    3,
-  SENSOR_TYPE_TEMP_HUM_BARO   =    4,
-  SENSOR_TYPE_DUAL            =    5,
-  SENSOR_TYPE_TRIPLE          =    6,
-  SENSOR_TYPE_QUAD            =    7,
-  SENSOR_TYPE_TEMP_EMPTY_BARO =    8,
-  SENSOR_TYPE_SWITCH          =   10,
-  SENSOR_TYPE_DIMMER          =   11,
-  SENSOR_TYPE_LONG            =   20,
-  SENSOR_TYPE_WIND            =   21,
-  SENSOR_TYPE_STRING          =   22,
-
-  SENSOR_TYPE_NOT_SET         = 255
-};
-
-enum class Output_Data_type_t : uint8_t {
-  Default = 0,
-  Simple, // SENSOR_TYPE_SINGLE, _DUAL, _TRIPLE, _QUAD
-  All
-};
 
 /*********************************************************************************************\
 * DeviceStruct
 * Description of a plugin
 \*********************************************************************************************/
-struct DeviceStruct
+struct __attribute__((__packed__)) DeviceStruct
 {
   DeviceStruct();
 
@@ -93,7 +71,15 @@ struct DeviceStruct
   bool TimerOption        : 1;       // Allow to set the "Interval" timer for the plugin.
   bool TimerOptional      : 1;       // When taskdevice timer is not set and not optional, use default "Interval" delay (Settings.Delay)
   bool DecimalsOnly       : 1;       // Allow to set the number of decimals (otherwise treated a 0 decimals)
+  bool DuplicateDetection : 1;       // Some (typically receiving) plugins may receive the same data on multiple nodes. Such a plugin must help detect message duplicates.
   bool ExitTaskBeforeSave : 1;       // Optimization in memory usage, Do not exit when task data is needed during save.
+  bool ErrorStateValues   : 1;       // Support Error State Values, can be called to retrieve surrogate values when PLUGIN_READ returns false
+  bool PluginStats        : 1;       // Support for PluginStats to record last N task values, show charts etc.
+  bool PluginLogsPeaks    : 1;       // When PluginStats is enabled, a call to PLUGIN_READ will also check for peaks. With this enabled, the plugin must call to check for peaks itself.
+  bool PowerManager       : 1;       // Is a Power management controller (Power manager), that can be selected to be intialized *before* the SPI interface is started.
+                                     // (F.e.: M5Stack Core/Core2 needs to power the TFT before SPI can be started)
+  bool TaskLogsOwnPeaks   : 1;       // When PluginStats is enabled, a call to PLUGIN_READ will also check for peaks. With this enabled, the plugin must call to check for peaks itself.
+  bool I2CNoDeviceCheck   : 1;       // When enabled, NO I2C check will be done on the I2C address returned from PLUGIN_I2C_GET_ADDRESS function call
 };
 typedef std::vector<DeviceStruct> DeviceVector;
 

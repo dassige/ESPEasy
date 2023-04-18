@@ -40,6 +40,11 @@
 //                      12h - No Blink",5:"Date"
 //
 // History
+// 2023-03-30, tonhuisman: Correct 7dtext on 6-digit TM1637 to also swap the dots when swapping the digits
+// 2023-03-29, tonhuisman: Add option to suppress the leading zero on day and hour when < 10
+//                         Disable scrolling for content/commands that don't support that
+// 2023-03-28, tonhuisman: Guard scrolling feature to only be used for 7dtext and 7dbin commands, and fix scrolling on 6-digit display
+//                         Fix 7dbin command to also work correctly for TM1637 displays
 // 2022-02-03, tonhuisman: Move P073_data_struct to PluginStruct directory, code optimizations, de-duplication
 // 2021-10-06, tonhuisman: Store via commands changed output, font and brightness setting in settings variables, but not save them yet.
 // 2021-10-05, tonhuisman: Add 7output command for changing the Display Output setting. Not saved, unless the save command is also sent.
@@ -71,6 +76,10 @@
 
 void tm1637_ShowDate6(struct EventStruct *event,
                       bool                showTime = false); // Forward declaration for default argument
+void tm1637_ShowBuffer(struct EventStruct *event,
+                       uint8_t             firstPos,
+                       uint8_t             lastPos,
+                       bool                useBinaryData = false);
 
 
 boolean Plugin_073(uint8_t function, struct EventStruct *event, String& string) {
@@ -150,6 +159,9 @@ boolean Plugin_073(uint8_t function, struct EventStruct *event, String& string) 
       # else // ifdef P073_7DDT_COMMAND
       addFormNote(F("Command 7dt,&lt;temp&gt;"));
       # endif // P073_7DDT_COMMAND
+      # ifdef P073_SUPPRESS_ZERO
+      addFormCheckBox(F("Suppress leading 0 on day/hour"), F("supp0"), bitRead(PCONFIG_LONG(0), P073_OPTION_SUPPRESS0));
+      # endif // ifdef P073_SUPPRESS_ZERO
 
       # ifdef P073_SCROLL_TEXT
       addFormCheckBox(F("Scroll text &gt; display width"), F("scroll_text"), bitRead(PCONFIG_LONG(0), P073_OPTION_SCROLLTEXT));
@@ -182,6 +194,9 @@ boolean Plugin_073(uint8_t function, struct EventStruct *event, String& string) 
       bitWrite(lSettings, P073_OPTION_SCROLLFULL, isFormItemChecked(F("scroll_full")));
       PCONFIG(3) = getFormItemInt(F("scrollspeed"));
       # endif // P073_SCROLL_TEXT
+      # ifdef P073_SUPPRESS_ZERO
+      bitWrite(lSettings, P073_OPTION_SUPPRESS0, isFormItemChecked(F("supp0")));
+      # endif // ifdef P073_SUPPRESS_ZERO
       # ifdef P073_EXTRA_FONTS
       PCONFIG(4) = getFormItemInt(F("fontset"));
       # endif // P073_EXTRA_FONTS
@@ -201,54 +216,34 @@ boolean Plugin_073(uint8_t function, struct EventStruct *event, String& string) 
       P073_data_struct *P073_data =
         static_cast<P073_data_struct *>(getPluginTaskData(event->TaskIndex));
 
-      if (nullptr == P073_data) {
-        return success;
-      }
+      if (nullptr != P073_data) {
+        P073_data->init(event);
 
-      // FIXME tonhuisman: Move to constructor?!
-      P073_data->pin1         = CONFIG_PIN1;
-      P073_data->pin2         = CONFIG_PIN2;
-      P073_data->pin3         = CONFIG_PIN3;
-      P073_data->displayModel = PCONFIG(0);
-      P073_data->output       = PCONFIG(1);
-      P073_data->brightness   = PCONFIG(2);
-      P073_data->periods      = bitRead(PCONFIG_LONG(0), P073_OPTION_PERIOD);
-      P073_data->hideDegree   = bitRead(PCONFIG_LONG(0), P073_OPTION_HIDEDEGREE);
-      # ifdef P073_SCROLL_TEXT
-      P073_data->txtScrolling = bitRead(PCONFIG_LONG(0), P073_OPTION_SCROLLTEXT);
-      P073_data->scrollFull   = bitRead(PCONFIG_LONG(0), P073_OPTION_SCROLLFULL);
-      P073_data->setScrollSpeed(PCONFIG(3));
-      # endif // P073_SCROLL_TEXT
-      P073_data->rightAlignTempMAX7219 = bitRead(PCONFIG_LONG(0), P073_OPTION_RIGHTALIGN);
-      P073_data->timesep               = true;
-      # ifdef P073_EXTRA_FONTS
-      P073_data->fontset = PCONFIG(4);
-      # endif // P073_EXTRA_FONTS
+        switch (P073_data->displayModel) {
+          case P073_TM1637_4DGTCOLON:
+          case P073_TM1637_4DGTDOTS:
+          case P073_TM1637_6DGT: {
+            tm1637_InitDisplay(CONFIG_PIN1, CONFIG_PIN2);
+            tm1637_SetPowerBrightness(CONFIG_PIN1, CONFIG_PIN2, PCONFIG(2) / 2, true);
 
-      switch (P073_data->displayModel) {
-        case P073_TM1637_4DGTCOLON:
-        case P073_TM1637_4DGTDOTS:
-        case P073_TM1637_6DGT: {
-          tm1637_InitDisplay(CONFIG_PIN1, CONFIG_PIN2);
-          tm1637_SetPowerBrightness(CONFIG_PIN1, CONFIG_PIN2, PCONFIG(2) / 2, true);
-
-          if (PCONFIG(1) == P073_DISP_MANUAL) {
-            tm1637_ClearDisplay(CONFIG_PIN1, CONFIG_PIN2);
+            if (PCONFIG(1) == P073_DISP_MANUAL) {
+              tm1637_ClearDisplay(CONFIG_PIN1, CONFIG_PIN2);
+            }
+            break;
           }
-          break;
-        }
-        case P073_MAX7219_8DGT: {
-          max7219_InitDisplay(event, CONFIG_PIN1, CONFIG_PIN2, CONFIG_PIN3);
-          delay(10); // small poweroff/poweron delay
-          max7219_SetPowerBrightness(event, CONFIG_PIN1, CONFIG_PIN2, CONFIG_PIN3, PCONFIG(2), true);
+          case P073_MAX7219_8DGT: {
+            max7219_InitDisplay(event, CONFIG_PIN1, CONFIG_PIN2, CONFIG_PIN3);
+            delay(10); // small poweroff/poweron delay
+            max7219_SetPowerBrightness(event, CONFIG_PIN1, CONFIG_PIN2, CONFIG_PIN3, PCONFIG(2), true);
 
-          if (PCONFIG(1) == P073_DISP_MANUAL) {
-            max7219_ClearDisplay(event, CONFIG_PIN1, CONFIG_PIN2, CONFIG_PIN3);
+            if (PCONFIG(1) == P073_DISP_MANUAL) {
+              max7219_ClearDisplay(event, CONFIG_PIN1, CONFIG_PIN2, CONFIG_PIN3);
+            }
+            break;
           }
-          break;
         }
+        success = true;
       }
-      success = true;
       break;
     }
 
@@ -273,10 +268,22 @@ boolean Plugin_073(uint8_t function, struct EventStruct *event, String& string) 
       }
 
       if (P073_data->output == P073_DISP_DATE) {
-        P073_data->FillBufferWithDate(true, 0, 0, 0);
+        P073_data->FillBufferWithDate(true, 0, 0, 0,
+                                      # ifdef P073_SUPPRESS_ZERO
+                                      bitRead(PCONFIG_LONG(0), P073_OPTION_SUPPRESS0)
+                                      # else // ifdef P073_SUPPRESS_ZERO
+                                      false
+                                      # endif // ifdef P073_SUPPRESS_ZERO
+                                      );
       } else {
         P073_data->FillBufferWithTime(true, 0, 0, 0, !((P073_data->output == P073_DISP_CLOCK24BLNK) ||
-                                                       (P073_data->output == P073_DISP_CLOCK24)));
+                                                       (P073_data->output == P073_DISP_CLOCK24)),
+                                      # ifdef P073_SUPPRESS_ZERO
+                                      bitRead(PCONFIG_LONG(0), P073_OPTION_SUPPRESS0)
+                                      # else // ifdef P073_SUPPRESS_ZERO
+                                      false
+                                      # endif // ifdef P073_SUPPRESS_ZERO
+                                      );
       }
 
       switch (P073_data->displayModel) {
@@ -316,28 +323,36 @@ boolean Plugin_073(uint8_t function, struct EventStruct *event, String& string) 
         break;
       }
 
-      if ((P073_data->output != P073_DISP_MANUAL) || !P073_data->txtScrolling) {
+      if ((P073_data->output != P073_DISP_MANUAL) || !P073_data->isScrollEnabled()) {
         break;
       }
 
-      P073_data->NextScroll();
-
-      switch (P073_data->displayModel) {
-        case P073_TM1637_4DGTCOLON:
-        case P073_TM1637_4DGTDOTS: {
-          tm1637_ShowBuffer(event, 0, 4);
-          break;
-        }
-        case P073_TM1637_6DGT: {
-          tm1637_SwapDigitInBuffer(event, 0); // only needed for 6-digits displays
-          tm1637_ShowBuffer(event, 0, 6);
-          break;
-        }
-        case P073_MAX7219_8DGT: {
-          P073_data->dotpos = -1; // avoid to display the dot
-          max7219_ShowBuffer(event, P073_data->pin1, P073_data->pin2,
-                             P073_data->pin3);
-          break;
+      if (P073_data->NextScroll()) {
+        switch (P073_data->displayModel) {
+          case P073_TM1637_4DGTCOLON:
+          case P073_TM1637_4DGTDOTS: {
+            tm1637_ShowBuffer(event, 0, 4
+                              #  ifdef P073_7DBIN_COMMAND
+                              , P073_data->binaryData
+                              #  endif // ifdef P073_7DBIN_COMMAND
+                              );
+            break;
+          }
+          case P073_TM1637_6DGT: {
+            tm1637_SwapDigitInBuffer(event, 0); // only needed for 6-digits displays
+            tm1637_ShowBuffer(event, 0, 6
+                              #  ifdef P073_7DBIN_COMMAND
+                              , P073_data->binaryData
+                              #  endif // ifdef P073_7DBIN_COMMAND
+                              );
+            break;
+          }
+          case P073_MAX7219_8DGT: {
+            P073_data->dotpos = -1; // avoid to display the dot
+            max7219_ShowBuffer(event, P073_data->pin1, P073_data->pin2,
+                               P073_data->pin3);
+            break;
+          }
         }
       }
       break;
@@ -356,46 +371,72 @@ bool p073_plugin_write(struct EventStruct *event,
     return false;
   }
 
-  const String cmd  = parseString(string, 1);
-  if (cmd.length() < 3 || cmd[0] != '7') return false;
+  const String cmd = parseString(string, 1);
+
+  if ((cmd.length() < 3) || (cmd[0] != '7')) { return false; }
+
+  # ifdef P073_SCROLL_TEXT
+  const bool currentScroll = P073_data->isScrollEnabled(); // Save current state
+  bool newScroll           = false;                        // disable scroll if command changes
+  P073_data->setScrollEnabled(false);
+  # endif // ifdef P073_SCROLL_TEXT
 
   const String text = parseStringToEndKeepCase(string, 2);
 
-  if (cmd.equals("7dn")) {
+  if (equals(cmd, F("7dn"))) {
     return p073_plugin_write_7dn(event, text);
-  } else if (cmd.equals("7dt")) {
+  } else if (equals(cmd, F("7dt"))) {
     return p073_plugin_write_7dt(event, text);
   # ifdef P073_7DDT_COMMAND
-  } else if (cmd.equals("7ddt")) {
+  } else if (equals(cmd, F("7ddt"))) {
     return p073_plugin_write_7ddt(event, text);
   # endif // ifdef P073_7DDT_COMMAND
-  } else if (cmd.equals("7dst")) {
+  } else if (equals(cmd, F("7dst"))) {
     return p073_plugin_write_7dst(event);
-  } else if (cmd.equals("7dsd")) {
+  } else if (equals(cmd, F("7dsd"))) {
     return p073_plugin_write_7dsd(event);
-  } else if (cmd.equals("7dtext")) {
+  } else if (equals(cmd, F("7dtext"))) {
+    # ifdef P073_SCROLL_TEXT
+    P073_data->setScrollEnabled(true); // Scrolling allowed for 7dtext command
+    # endif // ifdef P073_SCROLL_TEXT
     return p073_plugin_write_7dtext(event, text);
   # ifdef P073_EXTRA_FONTS
-  } else if (cmd.equals("7dfont")) {
+  } else if (equals(cmd, F("7dfont"))) {
+    #  ifdef P073_SCROLL_TEXT
+    P073_data->setScrollEnabled(currentScroll); // Restore state
+    #  endif // ifdef P073_SCROLL_TEXT
     return p073_plugin_write_7dfont(event, text);
   # endif // P073_EXTRA_FONTS
   # ifdef P073_7DBIN_COMMAND
-  } else if (cmd.equals("7dbin")) {
+  } else if (equals(cmd, F("7dbin"))) {
+    #  ifdef P073_SCROLL_TEXT
+    P073_data->setScrollEnabled(true); // Scrolling allowed for 7dbin command
+    #  endif // ifdef P073_SCROLL_TEXT
     return p073_plugin_write_7dbin(event, text);
   # endif // P073_7DBIN_COMMAND
   } else {
     bool p073_validcmd  = false;
     bool p073_displayon = false;
 
-    if (cmd.equals("7don")) {
+    if (equals(cmd, F("7don"))) {
+      # ifdef P073_SCROLL_TEXT
+      newScroll = currentScroll; // Restore state
+      # endif // ifdef P073_SCROLL_TEXT
       addLog(LOG_LEVEL_INFO, F("7DGT : Display ON"));
       p073_displayon = true;
       p073_validcmd  = true;
-    } else if (cmd.equals("7doff")) {
+    } else if (equals(cmd, F("7doff"))) {
+      # ifdef P073_SCROLL_TEXT
+      newScroll = currentScroll; // Restore state
+      # endif // ifdef P073_SCROLL_TEXT
       addLog(LOG_LEVEL_INFO, F("7DGT : Display OFF"));
       p073_displayon = false;
       p073_validcmd  = true;
-    } else if (cmd.equals("7db")) {
+    } else if (equals(cmd, F("7db"))) {
+      # ifdef P073_SCROLL_TEXT
+      newScroll = currentScroll; // Restore state
+      # endif // ifdef P073_SCROLL_TEXT
+
       if ((event->Par1 >= 0) && (event->Par1 < 16)) {
         if (loglevelActiveFor(LOG_LEVEL_INFO)) {
           String log = F("7DGT : Brightness=");
@@ -407,7 +448,7 @@ bool p073_plugin_write(struct EventStruct *event,
         p073_displayon        = true;
         p073_validcmd         = true;
       }
-    } else if (cmd.equals(F("7output"))) {
+    } else if (equals(cmd, F("7output"))) {
       if ((event->Par1 >= 0) && (event->Par1 < 6)) { // 0:"Manual",1:"Clock 24h - Blink",2:"Clock 24h - No Blink",
                                                      // 3:"Clock 12h - Blink",4:"Clock 12h - No Blink",5:"Date"
         if (loglevelActiveFor(LOG_LEVEL_INFO)) {
@@ -419,10 +460,18 @@ bool p073_plugin_write(struct EventStruct *event,
         PCONFIG(1)        = event->Par1;
         p073_displayon    = true;
         p073_validcmd     = true;
+        # ifdef P073_SCROLL_TEXT
+
+        if (event->Par1 == 0) { newScroll = currentScroll; } // Restore state
+        # endif // ifdef P073_SCROLL_TEXT
       }
     }
 
     if (p073_validcmd) {
+      # ifdef P073_SCROLL_TEXT
+      P073_data->setScrollEnabled(newScroll);
+      # endif // ifdef P073_SCROLL_TEXT
+
       switch (P073_data->displayModel) {
         case P073_TM1637_4DGTCOLON:
         case P073_TM1637_4DGTDOTS:
@@ -511,7 +560,7 @@ bool p073_plugin_write_7dt(struct EventStruct *event,
   }
 
   float p073_temptemp    = 0;
-  bool   p073_tempflagdot = false;
+  bool  p073_tempflagdot = false;
 
   if (!text.isEmpty()) {
     validFloatFromString(text, p073_temptemp);
@@ -528,11 +577,11 @@ bool p073_plugin_write_7dt(struct EventStruct *event,
     case P073_TM1637_4DGTDOTS:
     case P073_TM1637_6DGT:
     {
-      if ((p073_temptemp > 999) || (p073_temptemp < -99.9)) {
+      if ((p073_temptemp > 999.0f) || (p073_temptemp < -99.9f)) {
         P073_data->FillBufferWithDash();
       } else {
-        if ((p073_temptemp < 100) && (p073_temptemp > -10)) {
-          p073_temptemp    = round(p073_temptemp * 10.0);
+        if ((p073_temptemp < 100.0f) && (p073_temptemp > -10.0f)) {
+          p073_temptemp    = roundf(p073_temptemp * 10.0f);
           p073_tempflagdot = true;
         }
         P073_data->FillBufferWithTemp(p073_temptemp);
@@ -551,7 +600,7 @@ bool p073_plugin_write_7dt(struct EventStruct *event,
     }
     case P073_MAX7219_8DGT:
     {
-      p073_temptemp = round(p073_temptemp * 10.);
+      p073_temptemp = roundf(p073_temptemp * 10.0f);
       P073_data->FillBufferWithTemp(p073_temptemp);
 
       # ifdef P073_DEBUG
@@ -585,7 +634,7 @@ bool p073_plugin_write_7ddt(struct EventStruct *event,
 
   float p073_lefttemp    = 0.0f;
   float p073_righttemp   = 0.0f;
-  bool   p073_tempflagdot = false;
+  bool  p073_tempflagdot = false;
 
   if (!text.isEmpty()) {
     validFloatFromString(parseString(text, 1), p073_lefttemp);
@@ -629,7 +678,7 @@ bool p073_plugin_write_7ddt(struct EventStruct *event,
         p073_lefttemp = -101.0f * hideFactor; // Triggers on -100
       } else {
         if ((p073_lefttemp < 100.0f * hideFactor) && (p073_lefttemp > -10.0f * hideFactor)) {
-          p073_lefttemp = round(p073_lefttemp * 10.0f);
+          p073_lefttemp = roundf(p073_lefttemp * 10.0f);
           firstDot      = P073_data->hideDegree ? 2 : 1;
           firstDecimals = true;
         }
@@ -639,7 +688,7 @@ bool p073_plugin_write_7ddt(struct EventStruct *event,
         p073_righttemp = -101.0f * hideFactor;
       } else {
         if ((p073_righttemp < 100.0f * hideFactor) && (p073_righttemp > -10.0f * hideFactor)) {
-          p073_righttemp = round(p073_righttemp * 10.0f);
+          p073_righttemp = roundf(p073_righttemp * 10.0f);
           secondDot      = P073_data->hideDegree ? 6 : 5;
           secondDecimals = true;
         }
@@ -694,7 +743,13 @@ bool p073_plugin_write_7dst(struct EventStruct *event) {
     addLogMove(LOG_LEVEL_INFO, log);
   }
   P073_data->timesep = true;
-  P073_data->FillBufferWithTime(false, event->Par1, event->Par2, event->Par3, false);
+  P073_data->FillBufferWithTime(false, event->Par1, event->Par2, event->Par3, false,
+                                # ifdef P073_SUPPRESS_ZERO
+                                bitRead(PCONFIG_LONG(0), P073_OPTION_SUPPRESS0)
+                                # else // ifdef P073_SUPPRESS_ZERO
+                                false
+                                # endif // ifdef P073_SUPPRESS_ZERO
+                                );
 
   switch (P073_data->displayModel) {
     case P073_TM1637_4DGTCOLON:
@@ -734,7 +789,13 @@ bool p073_plugin_write_7dsd(struct EventStruct *event) {
     log += event->Par3;
     addLogMove(LOG_LEVEL_INFO, log);
   }
-  P073_data->FillBufferWithDate(false, event->Par1, event->Par2, event->Par3);
+  P073_data->FillBufferWithDate(false, event->Par1, event->Par2, event->Par3,
+                                # ifdef P073_SUPPRESS_ZERO
+                                bitRead(PCONFIG_LONG(0), P073_OPTION_SUPPRESS0)
+                                # else // ifdef P073_SUPPRESS_ZERO
+                                false
+                                # endif // ifdef P073_SUPPRESS_ZERO
+                                );
 
   switch (P073_data->displayModel) {
     case P073_TM1637_4DGTCOLON:
@@ -775,7 +836,7 @@ bool p073_plugin_write_7dtext(struct EventStruct *event,
   P073_data->setTextToScroll("");
   uint8_t bufLen = P073_data->getBufferLength(P073_data->displayModel);
 
-  if (P073_data->txtScrolling && (P073_data->getEffectiveTextLength(text) > bufLen)) {
+  if (P073_data->isScrollEnabled() && (P073_data->getEffectiveTextLength(text) > bufLen)) {
     P073_data->setTextToScroll(text);
   } else
   # endif // P073_SCROLL_TEXT
@@ -820,13 +881,13 @@ bool p073_plugin_write_7dfont(struct EventStruct *event,
     String fontArg = parseString(text, 1);
     int    fontNr  = -1;
 
-    if ((fontArg == F("default")) || (fontArg == F("7dgt"))) {
+    if ((equals(fontArg, F("default"))) || (equals(fontArg, F("7dgt")))) {
       fontNr = 0;
-    } else if (fontArg == F("siekoo")) {
+    } else if (equals(fontArg, F("siekoo"))) {
       fontNr = 1;
-    } else if (fontArg == F("siekoo_upper")) {
+    } else if (equals(fontArg, F("siekoo_upper"))) {
       fontNr = 2;
-    } else if (fontArg == F("dseg7")) {
+    } else if (equals(fontArg, F("dseg7"))) {
       fontNr = 3;
     } else if (!validIntFromString(text, fontNr)) {
       fontNr = -1; // reset if invalid
@@ -887,7 +948,7 @@ bool p073_plugin_write_7dbin(struct EventStruct *event,
       #  ifdef P073_SCROLL_TEXT
       P073_data->setTextToScroll(EMPTY_STRING); // Clear any scrolling text
 
-      if (P073_data->txtScrolling && (data.length() > bufLen)) {
+      if (P073_data->isScrollEnabled() && (data.length() > bufLen)) {
         P073_data->setBinaryData(data);
       } else
       #  endif // P073_SCROLL_TEXT
@@ -904,7 +965,7 @@ bool p073_plugin_write_7dbin(struct EventStruct *event,
           case P073_TM1637_6DGT:
           {
             tm1637_SwapDigitInBuffer(event, 0); // only needed for 6-digits displays
-            tm1637_ShowBuffer(event, 0, 6);
+            tm1637_ShowBuffer(event, 0, 6, true);
             break;
           }
           case P073_MAX7219_8DGT:
@@ -1167,7 +1228,7 @@ void tm1637_SwapDigitInBuffer(struct EventStruct *event,
   if (nullptr == P073_data) {
     return;
   }
-  uint8_t p073_tmp;
+  uint8_t p073_tmp; // Swap digits
 
   p073_tmp                            = P073_data->showbuffer[2 + startPos];
   P073_data->showbuffer[2 + startPos] = P073_data->showbuffer[0 + startPos];
@@ -1175,6 +1236,15 @@ void tm1637_SwapDigitInBuffer(struct EventStruct *event,
   p073_tmp                            = P073_data->showbuffer[3 + startPos];
   P073_data->showbuffer[3 + startPos] = P073_data->showbuffer[5 + startPos];
   P073_data->showbuffer[5 + startPos] = p073_tmp;
+
+  bool p073_per; // Swap periods
+
+  p073_per                             = P073_data->showperiods[2 + startPos];
+  P073_data->showperiods[2 + startPos] = P073_data->showperiods[0 + startPos];
+  P073_data->showperiods[0 + startPos] = p073_per;
+  p073_per                             = P073_data->showperiods[3 + startPos];
+  P073_data->showperiods[3 + startPos] = P073_data->showperiods[5 + startPos];
+  P073_data->showperiods[5 + startPos] = p073_per;
 
   switch (P073_data->dotpos) {
     case 2: {
@@ -1198,7 +1268,8 @@ void tm1637_SwapDigitInBuffer(struct EventStruct *event,
 
 void tm1637_ShowBuffer(struct EventStruct *event,
                        uint8_t             firstPos,
-                       uint8_t             lastPos) {
+                       uint8_t             lastPos,
+                       bool                useBinaryData) {
   P073_data_struct *P073_data =
     static_cast<P073_data_struct *>(getPluginTaskData(event->TaskIndex));
 
@@ -1217,10 +1288,14 @@ void tm1637_ShowBuffer(struct EventStruct *event,
   uint8_t p073_datashowpos1;
 
   for (int i = firstPos; i < lastPos; i++) {
-    p073_datashowpos1 = tm1637_separator(
-      P073_data->tm1637_getFontChar(P073_data->showbuffer[i], P073_data->fontset),
-      P073_data->showperiods[i]);
-    bytesToPrint[length] = p073_datashowpos1;
+    if (useBinaryData) {
+      bytesToPrint[length] = P073_data->showbuffer[i];
+    } else {
+      p073_datashowpos1 = tm1637_separator(
+        P073_data->tm1637_getFontChar(P073_data->showbuffer[i], P073_data->fontset),
+        P073_data->showperiods[i]);
+      bytesToPrint[length] = p073_datashowpos1;
+    }
     ++length;
   }
   tm1637_i2cWrite_ack(P073_data->pin1, P073_data->pin2, bytesToPrint, length);

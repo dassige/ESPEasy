@@ -18,8 +18,6 @@
 //
 // https://www.youtube.com/watch?v=5_V_DibOypE
 
-// #ifdef PLUGIN_BUILD_TESTING
-
 // Uncomment this to use ssl connection. This requires more device resources than unencrypted one.
 // Also it requires valid server thumbprint string to be entered in plugin settings.
 // #define CPLUGIN_015_SSL
@@ -38,7 +36,7 @@
   #ifdef ESP32
   #  include <BlynkSimpleEsp32_SSL.h>
   #endif
-  #  define CPLUGIN_NAME_015       "Blynk SSL [TESTING]"
+  #  define CPLUGIN_NAME_015       "Blynk SSL"
 
 // Current official blynk server thumbprint
   #  define CPLUGIN_015_DEFAULT_THUMBPRINT "FD C0 7D 8D 47 97 F7 E3 07 05 D3 4E E3 BB 8E 3D C0 EA BE 1C"
@@ -50,7 +48,7 @@
  #ifdef ESP32
  #  include <BlynkSimpleEsp32.h>
  #endif
- #  define CPLUGIN_NAME_015       "Blynk [TESTING]"
+ #  define CPLUGIN_NAME_015       "Blynk"
  #  define C015_LOG_PREFIX "BL: "
 # endif // ifdef CPLUGIN_015_SSL
 
@@ -174,6 +172,9 @@ bool CPlugin_015(CPlugin::Function function, struct EventStruct *event, String& 
       if (C015_DelayHandler == nullptr) {
         break;
       }
+      if (C015_DelayHandler->queueFull(event->ControllerIndex)) {
+        break;
+      }
 
       if (!Settings.ControllerEnabled[event->ControllerIndex]) {
         break;
@@ -182,15 +183,14 @@ bool CPlugin_015(CPlugin::Function function, struct EventStruct *event, String& 
       // Collect the values at the same run, to make sure all are from the same sample
       uint8_t valueCount = getValueCountForTask(event->TaskIndex);
 
-      
-      success = C015_DelayHandler->addToQueue(C015_queue_element(event, valueCount));
+      std::unique_ptr<C015_queue_element> element(new C015_queue_element(event, valueCount));
+      success = C015_DelayHandler->addToQueue(std::move(element));
 
       if (success) {
         // Element was added.
         // Now we try to append to the existing element
         // and thus preventing the need to create a long string only to copy it to a queue element.
-        C015_queue_element& element = C015_DelayHandler->sendQueue.back();
-        LoadTaskSettings(event->TaskIndex);
+        C015_queue_element& element = static_cast<C015_queue_element&>(*(C015_DelayHandler->sendQueue.back()));
 
         for (uint8_t x = 0; x < valueCount; x++)
         {
@@ -202,8 +202,8 @@ bool CPlugin_015(CPlugin::Function function, struct EventStruct *event, String& 
             formattedValue = String();
           }
 
-          String valueName     = ExtraTaskSettings.TaskDeviceValueNames[x];
-          String valueFullName = ExtraTaskSettings.TaskDeviceName;
+          const String valueName = getTaskValueName(event->TaskIndex, x);
+          String valueFullName   = getTaskDeviceName(event->TaskIndex);
           valueFullName += F(".");
           valueFullName += valueName;
           String vPinNumberStr = valueName.substring(1, 4);
@@ -252,9 +252,10 @@ bool CPlugin_015(CPlugin::Function function, struct EventStruct *event, String& 
 
 // Uncrustify may change this into multi line, which will result in failed builds
 // *INDENT-OFF*
-bool do_process_c015_delay_queue(int controller_plugin_number, const C015_queue_element& element, ControllerSettingsStruct& ControllerSettings) {
+bool do_process_c015_delay_queue(int controller_number, const Queue_element_base& element_base, ControllerSettingsStruct& ControllerSettings) {
+  const C015_queue_element& element = static_cast<const C015_queue_element&>(element_base);
 // *INDENT-ON*
-  if (!Settings.ControllerEnabled[element.controller_idx]) {
+  if (!Settings.ControllerEnabled[element._controller_idx]) {
     // controller has been disabled. Answer true to flush queue.
     return true;
   }
@@ -263,7 +264,7 @@ bool do_process_c015_delay_queue(int controller_plugin_number, const C015_queue_
     return false;
   }
 
-  if (!Blynk_keep_connection_c015(element.controller_idx, ControllerSettings)) {
+  if (!Blynk_keep_connection_c015(element._controller_idx, ControllerSettings)) {
     return false;
   }
 
@@ -460,7 +461,7 @@ BLYNK_WRITE_DEFAULT() {
   if (Settings.UseRules) {
     String eventCommand = F("blynkv");
     eventCommand += vPin;
-    eventCommand += F("=");
+    eventCommand += '=';
     eventCommand += pinValue;
     eventQueue.addMove(std::move(eventCommand));
   }

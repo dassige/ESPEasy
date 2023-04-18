@@ -58,8 +58,8 @@ bool getIPallowedRange(IPAddress& low, IPAddress& high)
       }
       return getSubnetRange(low, high);
     case ONLY_IP_RANGE_ALLOWED:
-      low  = SecuritySettings.AllowedIPrangeLow;
-      high = SecuritySettings.AllowedIPrangeHigh;
+      low  = IPAddress(SecuritySettings.AllowedIPrangeLow);
+      high = IPAddress(SecuritySettings.AllowedIPrangeHigh);
       break;
     default:
       low  = IPAddress(0, 0, 0, 0);
@@ -76,8 +76,7 @@ bool clientIPinSubnet() {
     // Could not determine subnet.
     return false;
   }
-  WiFiClient client(web_server.client());
-  return ipInRange(client.remoteIP(), low, high);
+  return ipInRange(web_server.client().remoteIP(), low, high);
 }
 
 boolean clientIPallowed()
@@ -90,9 +89,9 @@ boolean clientIPallowed()
     // No subnet range determined, cannot filter on IP
     return true;
   }
-  WiFiClient client(web_server.client());
+  const IPAddress remoteIP = web_server.client().remoteIP();
 
-  if (ipInRange(client.remoteIP(), low, high)) {
+  if (ipInRange(remoteIP, low, high)) {
     return true;
   }
 
@@ -101,7 +100,7 @@ boolean clientIPallowed()
     return true;
   }
   String response = F("IP blocked: ");
-  response += formatIP(client.remoteIP());
+  response += formatIP(remoteIP);
   web_server.send(403, F("text/html"), response);
 
   if (loglevelActiveFor(LOG_LEVEL_ERROR)) {

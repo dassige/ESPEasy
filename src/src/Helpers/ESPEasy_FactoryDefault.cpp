@@ -3,6 +3,7 @@
 #include "../../ESPEasy_common.h"
 #include "../../_Plugin_Helper.h"
 
+#include "../CustomBuild/CompiletimeDefines.h"
 #include "../CustomBuild/StorageLayout.h"
 
 #include "../DataStructs/ControllerSettingsStruct.h"
@@ -19,15 +20,16 @@
 
 #include "../Helpers/_CPlugin_Helper.h"
 #include "../Helpers/ESPEasyRTC.h"
+#include "../Helpers/FS_Helper.h"
 #include "../Helpers/Hardware.h"
 #include "../Helpers/Misc.h"
 
 /********************************************************************************************\
    Reset all settings to factory defaults
  \*********************************************************************************************/
-void ResetFactory()
+void ResetFactory(bool formatFS)
 {
-  #ifdef USE_CUSTOM_PROVISIONING
+  #if FEATURE_CUSTOM_PROVISIONING
   if (ResetFactoryDefaultPreference.getPreference() == 0)
   {
     ResetFactoryDefaultPreference.setDeviceModel(static_cast<DeviceModel>(DEFAULT_FACTORY_DEFAULT_DEVICE_MODEL));
@@ -41,7 +43,6 @@ void ResetFactory()
     ResetFactoryDefaultPreference.fetchProvisioningDat(DEFAULT_PROVISIONING_FETCH_PROVISIONING);
     ResetFactoryDefaultPreference.saveURL(DEFAULT_PROVISIONING_SAVE_URL);
     ResetFactoryDefaultPreference.storeCredentials(DEFAULT_PROVISIONING_SAVE_CREDENTIALS);
-    ResetFactoryDefaultPreference.allowFetchByCommand(DEFAULT_PROVISIONING_ALLOW_FETCH_COMMAND);
   }
   #endif
 
@@ -81,19 +82,21 @@ void ResetFactory()
   RTC.factoryResetCounter++;
   saveToRTC();
 
-  // always format on factory reset, in case of corrupt FS
-//  ESPEASY_FS.end();
-  serialPrintln(F("RESET: formatting..."));
-  FS_format();
-  serialPrintln(F("RESET: formatting done..."));
+  if (formatFS) {
+    // always format on factory reset, in case of corrupt FS
+    ESPEASY_FS.end();
+    serialPrintln(F("RESET: formatting..."));
+    FS_format();
+    serialPrintln(F("RESET: formatting done..."));
 
-  if (!ESPEASY_FS.begin())
-  {
-    serialPrintln(F("RESET: FORMAT FS FAILED!"));
-    return;
+    if (!ESPEASY_FS.begin())
+    {
+      serialPrintln(F("RESET: FORMAT FS FAILED!"));
+      return;
+    }
   }
 
-#ifdef USE_CUSTOM_PROVISIONING
+#if FEATURE_CUSTOM_PROVISIONING
   {
     MakeProvisioningSettings(ProvisioningSettings);
     if (AllocatedProvisioningSettings()) {
@@ -109,9 +112,9 @@ void ResetFactory()
   // pad files with extra zeros for future extensions
   InitFile(SettingsType::SettingsFileEnum::FILE_CONFIG_type);
   InitFile(SettingsType::SettingsFileEnum::FILE_SECURITY_type);
-  #ifdef USES_NOTIFIER
+  #if FEATURE_NOTIFIER
   InitFile(SettingsType::SettingsFileEnum::FILE_NOTIFICATION_type);
-  #endif
+  #endif // if FEATURE_NOTIFIER
 
   InitFile(getRulesFileName(0), 0);
 
@@ -171,8 +174,6 @@ void ResetFactory()
     strcpy_P(SecuritySettings.WifiSSID2, PSTR(DEFAULT_SSID2));
     strcpy_P(SecuritySettings.WifiKey2,  PSTR(DEFAULT_KEY2));
     strcpy_P(SecuritySettings.WifiAPKey, PSTR(DEFAULT_AP_KEY));
-    SecuritySettings.WifiSSID2[0] = 0;
-    SecuritySettings.WifiKey2[0]  = 0;
   }
   strcpy_P(SecuritySettings.Password, PSTR(DEFAULT_ADMIN_PASS));
 
@@ -183,7 +184,7 @@ void ResetFactory()
 
   Settings.PID     = ESP_PROJECT_PID;
   Settings.Version = VERSION;
-  Settings.Build   = BUILD;
+  Settings.Build   = get_build_nr();
 
   //  Settings.IP_Octet				 = DEFAULT_IP_OCTET;
   Settings.Delay                   = DEFAULT_DELAY;
@@ -194,7 +195,7 @@ void ResetFactory()
   Settings.Pin_sd_cs               = -1;
   Settings.Pin_Reset               = DEFAULT_PIN_RESET_BUTTON;
   Settings.Protocol[0]             = DEFAULT_PROTOCOL;
-  Settings.deepSleep_wakeTime      = false;
+  Settings.deepSleep_wakeTime      = 0; // Sleep disabled
   Settings.CustomCSS               = false;
   Settings.InitSPI                 = DEFAULT_SPI;
 
@@ -230,12 +231,15 @@ void ResetFactory()
   Settings.UseSerial = DEFAULT_USE_SERIAL;
   Settings.BaudRate  = DEFAULT_SERIAL_BAUD;
 
+#ifdef ESP32
+  // Ethernet related settings are never used on ESP8266
   Settings.ETH_Phy_Addr   = gpio_settings.eth_phyaddr;
   Settings.ETH_Pin_mdc    = gpio_settings.eth_mdc;
   Settings.ETH_Pin_mdio   = gpio_settings.eth_mdio;
   Settings.ETH_Pin_power  = gpio_settings.eth_power;
   Settings.ETH_Phy_Type   = gpio_settings.eth_phytype;
   Settings.ETH_Clock_Mode = gpio_settings.eth_clock_mode;
+#endif
   Settings.NetworkMedium  = gpio_settings.network_medium;
 
   /*
@@ -279,6 +283,7 @@ void ResetFactory()
       ControllerSettings.UseDNS = DEFAULT_SERVER_USEDNS;
       ControllerSettings.useExtendedCredentials(DEFAULT_USE_EXTD_CONTROLLER_CREDENTIALS);
       ControllerSettings.Port = DEFAULT_PORT;
+      ControllerSettings.ClientTimeout = DEFAULT_CONTROLLER_TIMEOUT;
       setControllerUser(0, ControllerSettings, F(DEFAULT_CONTROLLER_USER));
       setControllerPass(0, ControllerSettings, F(DEFAULT_CONTROLLER_PASS));
 

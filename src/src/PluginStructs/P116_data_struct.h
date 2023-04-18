@@ -24,9 +24,9 @@
 # define P116_CONFIG_TYPE               PCONFIG(2)      // Type of device
 # define P116_CONFIG_BACKLIGHT_PIN      PCONFIG(3)      // Backlight pin
 # define P116_CONFIG_BACKLIGHT_PERCENT  PCONFIG(4)      // Backlight percentage
-# define P116_CONFIG_COLORS             PCONFIG_LONG(3) // 2 Colors fit in 1 long
+# define P116_CONFIG_COLORS            PCONFIG_ULONG(3) // 2 Colors fit in 1 long
 
-# define P116_CONFIG_FLAGS              PCONFIG_LONG(0) // All flags
+# define P116_CONFIG_FLAGS             PCONFIG_ULONG(0) // All flags
 # define P116_CONFIG_FLAG_NO_WAKE       0               // Flag: Don't wake display
 # define P116_CONFIG_FLAG_INVERT_BUTTON 1               // Flag: Inverted button state
 # define P116_CONFIG_FLAG_CLEAR_ON_EXIT 2               // Flag: Clear display on exit
@@ -58,38 +58,37 @@
 # else // ifdef ESP32
 
 // Was: for D1 Mini with shield connection
-  #  define P116_TFT_CS        0 // D3
-  #  define P116_TFT_DC        4 // D2
+  #  define P116_TFT_CS        0  // D3
+  #  define P116_TFT_DC        4  // D2
   #  define P116_TFT_RST       -1 // D4 // -1
   #  define P116_BACKLIGHT_PIN -1 // D6 // 15 // D8 -> Blocks Wemos
 # endif // ifdef ESP32
 
 enum class ST77xx_type_e : uint8_t {
-  ST7735s_128x128 = 0,
-  ST7735s_128x160,
-  ST7735s_80x160,
-  ST7789vw_240x320,
-  ST7789vw_240x240,
-  ST7789vw_240x280,
-  ST7789vw_135x240,
-  ST7796s_320x480,
-  ST77xx_MAX // must be last value in enum
+  ST7735s_128x128   = 0,
+  ST7735s_128x160   = 1u,
+  ST7735s_80x160    = 2u,
+  ST7789vw_240x320  = 3u,
+  ST7789vw_240x240  = 4u,
+  ST7789vw_240x280  = 5u,
+  ST7789vw_135x240  = 6u,
+  ST7796s_320x480   = 7u,
+  ST7735s_80x160_M5 = 8u,
 };
 
 enum class P116_CommandTrigger : uint8_t {
-  tft = 0u,
-  st77xx,
-  st7735,
-  st7789,
-  st7796,
-  MAX // Keep as last item!
+  tft    = 0u,
+  st77xx = 1u,
+  st7735 = 2u,
+  st7789 = 3u,
+  st7796 = 4u,
 };
 
-const __FlashStringHelper* ST77xx_type_toString(ST77xx_type_e device);
-const __FlashStringHelper* P116_CommandTrigger_toString(P116_CommandTrigger cmd);
-void                       ST77xx_type_toResolution(ST77xx_type_e device,
-                                                    uint16_t    & x,
-                                                    uint16_t    & y);
+const __FlashStringHelper* ST77xx_type_toString(const ST77xx_type_e& device);
+const __FlashStringHelper* P116_CommandTrigger_toString(const P116_CommandTrigger& cmd);
+void                       ST77xx_type_toResolution(const ST77xx_type_e& device,
+                                                    uint16_t           & x,
+                                                    uint16_t           & y);
 
 struct P116_data_struct : public PluginTaskData_base {
 public:
@@ -105,13 +104,18 @@ public:
                    uint16_t            fgcolor      = ADAGFX_WHITE,
                    uint16_t            bgcolor      = ADAGFX_BLACK,
                    bool                textBackFill = true);
-  ~P116_data_struct();
+  P116_data_struct()                                = delete;
+  virtual ~P116_data_struct();
 
   bool plugin_init(struct EventStruct *event);
   bool plugin_exit(struct EventStruct *event);
   bool plugin_read(struct EventStruct *event);
   bool plugin_write(struct EventStruct *event,
                     const String      & string);
+  # if ADAGFX_ENABLE_GET_CONFIG_VALUE
+  bool plugin_get_config_value(struct EventStruct *event,
+                               String            & string);
+  # endif // if ADAGFX_ENABLE_GET_CONFIG_VALUE
   bool plugin_ten_per_second(struct EventStruct *event);
   bool plugin_once_a_second(struct EventStruct *event);
 
@@ -135,10 +139,10 @@ private:
   AdafruitGFX_helper   *gfxHelper = nullptr;
   enum ST77xx_type_e    _device;
 
-  uint16_t _xpix;
-  uint16_t _ypix;
-  uint16_t _textcols;
-  uint16_t _textrows;
+  uint16_t _xpix         = 0;
+  uint16_t _ypix         = 0;
+  uint16_t _textcols     = 0;
+  uint16_t _textrows     = 0;
   uint8_t  _fontwidth    = 6; // Default font characteristics
   uint8_t  _fontheight   = 10;
   uint8_t  _heightOffset = 0;
@@ -164,6 +168,10 @@ private:
 
   int8_t _leftMarginCompensation = 0; // Not settable yet
   int8_t _topMarginCompensation  = 0;
+
+  String strings[P116_Nlines];
+  bool   stringsLoaded     = false;
+  bool   stringsHasContent = false;
 };
 
 

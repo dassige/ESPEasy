@@ -1,6 +1,8 @@
 #ifndef DATASTRUCTS_ESPEASY_EVENTSTRUCT_H
 #define DATASTRUCTS_ESPEASY_EVENTSTRUCT_H
 
+#include "../../ESPEasy_common.h"
+
 #include <Arduino.h>
 
 #include "../DataTypes/ControllerIndex.h"
@@ -8,7 +10,6 @@
 #include "../DataTypes/TaskIndex.h"
 #include "../DataTypes/NotifierIndex.h"
 #include "../DataStructs/DeviceStruct.h"
-
 
 
 /*********************************************************************************************\
@@ -46,24 +47,27 @@ public:
   // Check (and update) sensorType if not set, plus return (corrected) sensorType
   Sensor_VType getSensorType();
 
-  String String1;
-  String String2;
-  String String3;
-  String String4;
-  String String5;
-  uint8_t  *Data = nullptr;
-  int    idx  = 0;
-  int    Par1 = 0;
-  int    Par2 = 0;
-  int    Par3 = 0;
-  int    Par4 = 0;
-  int    Par5 = 0;
+  String        String1;
+  String        String2;
+  String        String3;
+  String        String4;
+  String        String5;
+  unsigned long timestamp = 0u;
+  uint8_t      *Data = nullptr;
+  int           idx  = 0;
+  int           Par1 = 0;
+  int           Par2 = 0;
+  int           Par3 = 0;
+  int           Par4 = 0;
+  int           Par5 = 0;
 
   // The origin of the values in the event. See EventValueSource.h
   EventValueSource::Enum Source            = EventValueSource::Enum::VALUE_SOURCE_NOT_SET;
   taskIndex_t            TaskIndex         = INVALID_TASK_INDEX;       // index position in TaskSettings array, 0-11
   controllerIndex_t      ControllerIndex   = INVALID_CONTROLLER_INDEX; // index position in Settings.Controller, 0-3
+#if FEATURE_NOTIFIER
   notifierIndex_t        NotificationIndex = INVALID_NOTIFIER_INDEX;   // index position in Settings.Notification, 0-3
+#endif
   uint8_t                BaseVarIndex      = 0;
   Sensor_VType           sensorType        = Sensor_VType::SENSOR_TYPE_NOT_SET;
   uint8_t                OriginTaskIndex   = 0;

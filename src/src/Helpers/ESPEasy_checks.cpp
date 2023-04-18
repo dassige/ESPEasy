@@ -2,21 +2,22 @@
 
 
 #include "../../ESPEasy_common.h"
+#ifndef BUILD_MINIMAL_OTA
 
 #include "../DataStructs/CRCStruct.h"
 #include "../DataStructs/ControllerSettingsStruct.h"
 #include "../DataStructs/DeviceStruct.h"
 #include "../DataStructs/ESPEasy_EventStruct.h"
-#include "../DataStructs/ESPEasy_EventStruct.h"
 #include "../DataStructs/ExtraTaskSettingsStruct.h"
 #include "../DataStructs/FactoryDefaultPref.h"
 #include "../DataStructs/GpioFactorySettingsStruct.h"
 #include "../DataStructs/LogStruct.h"
+#if FEATURE_ESPEASY_P2P
 #include "../DataStructs/NodeStruct.h"
-#include "../DataStructs/NodeStruct.h"
+#endif
 #include "../DataStructs/PortStatusStruct.h"
 #include "../DataStructs/ProtocolStruct.h"
-#ifdef USE_CUSTOM_PROVISIONING
+#if FEATURE_CUSTOM_PROVISIONING
 #include "../DataStructs/ProvisioningStruct.h"
 #endif
 #include "../DataStructs/RTCStruct.h"
@@ -40,10 +41,10 @@
 #include "../ControllerQueue/C016_queue_element.h"
 #endif
 
-#ifdef USES_NOTIFIER
+#if FEATURE_NOTIFIER
 #include "../DataStructs/NotificationStruct.h"
 #include "../DataStructs/NotificationSettingsStruct.h"
-#endif
+#endif // if FEATURE_NOTIFIER
 
 
 // ********************************************************************************
@@ -75,25 +76,25 @@ void run_compiletime_checks() {
   check_size<CRCStruct,                             204u>();
   check_size<SecurityStruct,                        593u>();
   #ifdef ESP32
-  const unsigned int SettingsStructSize = (316 + 84 * TASKS_MAX);
+  const unsigned int SettingsStructSize = (336 + 84 * TASKS_MAX);
   #endif
   #ifdef ESP8266
-  const unsigned int SettingsStructSize = (292 + 84 * TASKS_MAX);
+  const unsigned int SettingsStructSize = (312 + 84 * TASKS_MAX);
   #endif
-  #ifdef USE_CUSTOM_PROVISIONING
+  #if FEATURE_CUSTOM_PROVISIONING
   check_size<ProvisioningStruct,                    256u>();  
   #endif
   check_size<SettingsStruct,                        SettingsStructSize>();
   check_size<ControllerSettingsStruct,              820u>();
-  #ifdef USES_NOTIFIER
+  #if FEATURE_NOTIFIER
   check_size<NotificationSettingsStruct,            996u>();
-  #endif
-  check_size<ExtraTaskSettingsStruct,               472u>();
+  #endif // if FEATURE_NOTIFIER
+  check_size<ExtraTaskSettingsStruct,               536u>();
   #if ESP_IDF_VERSION_MAJOR > 3
   // String class has increased with 4 bytes
-  check_size<EventStruct,                           116u>(); // Is not stored
+  check_size<EventStruct,                           120u>(); // Is not stored
   #else
-  check_size<EventStruct,                           96u>(); // Is not stored
+  check_size<EventStruct,                           100u>(); // Is not stored
   #endif
 
 
@@ -106,33 +107,32 @@ void run_compiletime_checks() {
   const unsigned int LogStructSize = ((13u + 17 * LOG_STRUCT_MESSAGE_LINES) + 3) & ~3;
   #endif
   check_size<LogStruct,                             LogStructSize>(); // Is not stored
-  check_size<DeviceStruct,                          8u>(); // Is not stored
+  check_size<DeviceStruct,                          9u>(); // Is not stored
   check_size<ProtocolStruct,                        6u>();
-  #ifdef USES_NOTIFIER
+  #if FEATURE_NOTIFIER
   check_size<NotificationStruct,                    3u>();
+  #endif // if FEATURE_NOTIFIER
+  #if FEATURE_ESPEASY_P2P
+  check_size<NodeStruct,                            66u>();
   #endif
-  #if ESP_IDF_VERSION_MAJOR > 3
-  // String class has increased with 4 bytes
-  check_size<NodeStruct,                            32u>();
-  #else
-  check_size<NodeStruct,                            28u>();
+  #if FEATURE_CUSTOM_PROVISIONING
+  check_size<ProvisioningStruct,                    256u>();
   #endif
-
-  check_size<systemTimerStruct,                     24u>();
+  check_size<systemTimerStruct,                     28u>();
   check_size<RTCStruct,                             32u>();
   check_size<portStatusStruct,                      6u>();
   check_size<ResetFactoryDefaultPreference_struct,  4u>();
   check_size<GpioFactorySettingsStruct,             18u>();
   #ifdef USES_C013
-  check_size<C013_SensorInfoStruct,                 137u>();
+  check_size<C013_SensorInfoStruct,                 138u>();
   check_size<C013_SensorDataStruct,                 24u>();
   #endif
   #ifdef USES_C016
-  check_size<C016_queue_element,                    24u>();
+  check_size<C016_binary_element,                   24u>();
   #endif
 
 
-  #if defined(USE_NON_STANDARD_24_TASKS) && defined(ESP8266)
+  #if FEATURE_NON_STANDARD_24_TASKS && defined(ESP8266)
     static_assert(TASKS_MAX == 24, "TASKS_MAX invalid size");
   #endif
 
@@ -158,6 +158,13 @@ void run_compiletime_checks() {
 
     const unsigned int md5_offset = ProgmemMd5_offset + 16;
     static_assert(md5_offset == offsetof(SecurityStruct, md5), "");
+
+    #if FEATURE_CUSTOM_PROVISIONING
+    const unsigned int prov_pass_offset = 62u;
+    static_assert(prov_pass_offset == offsetof(ProvisioningStruct, pass), "");
+
+
+    #endif
   }
 
 
@@ -218,13 +225,13 @@ bool SettingsCheck(String& error) {
 
 String checkTaskSettings(taskIndex_t taskIndex) {
   String err = LoadTaskSettings(taskIndex);
-  #ifndef LIMIT_BUILD_SIZE
+  #if !defined(PLUGIN_BUILD_MINIMAL_OTA) && !defined(ESP8266_1M)
   if (err.length() > 0) return err;
   if (!ExtraTaskSettings.checkUniqueValueNames()) {
     return F("Use unique value names");
   }
   if (!ExtraTaskSettings.checkInvalidCharInNames()) {
-    return F("Invalid character in name. Do not use ',-+/*=^%!#[]{}()' or space.");
+    return concat(F("Invalid character in name. Do not use space or '"), ExtraTaskSettingsStruct::getInvalidCharsForNames()) + '\'';
   }
   String deviceName = ExtraTaskSettings.TaskDeviceName;
   NumericalType detectedType;
@@ -252,6 +259,7 @@ String checkTaskSettings(taskIndex_t taskIndex) {
   }
 
   err += LoadTaskSettings(taskIndex);
-  #endif
+  #endif 
   return err;
 }
+#endif

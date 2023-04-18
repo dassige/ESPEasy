@@ -24,6 +24,8 @@ String minutesToHourMinute(int minutes);
 
 String minutesToDayHourMinute(int minutes);
 
+String minutesToHourColonMinute(int minutes);
+
 String secondsToDayHourMinuteSecond(int seconds);
 
 String format_msec_duration(int64_t duration);
@@ -62,12 +64,6 @@ unsigned long float2ul(float f);
  \*******************************************************************************************/
 float ul2float(unsigned long ul);
 
-/*********************************************************************************************\
-   Workaround for removing trailing white space when String() converts a float with 0 decimals
-\*********************************************************************************************/
-String toString(const float& value, unsigned int decimalPlaces = 2);
-
-String doubleToString(const double& value, unsigned int decimalPlaces = 2, bool trimTrailingZeros = false);
 
 
 #endif // HELPERS_CONVERT_H

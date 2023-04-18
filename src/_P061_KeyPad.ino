@@ -77,7 +77,7 @@
 
 # define PLUGIN_061
 # define PLUGIN_ID_061         61
-# define PLUGIN_NAME_061       "Keypad - PCF8574 / MCP23017 / PCF8575 [TESTING]"
+# define PLUGIN_NAME_061       "Keypad - PCF8574 / MCP23017 / PCF8575"
 # define PLUGIN_VALUENAME1_061 "ScanCode"
 
 
@@ -135,6 +135,15 @@ boolean Plugin_061(uint8_t function, struct EventStruct *event, String& string)
       }
       break;
     }
+
+    # if FEATURE_I2C_GET_ADDRESS
+    case PLUGIN_I2C_GET_ADDRESS:
+    {
+      event->Par1 = P061_CONFIG_I2C_ADDRESS;
+      success     = true;
+      break;
+    }
+    # endif // if FEATURE_I2C_GET_ADDRESS
 
     case PLUGIN_WEBFORM_LOAD:
     {

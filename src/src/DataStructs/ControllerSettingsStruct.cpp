@@ -16,18 +16,18 @@
 
 ControllerSettingsStruct::ControllerSettingsStruct()
 {
-  reset();
+  safe_strncpy(ClientID, F(CONTROLLER_DEFAULT_CLIENTID), sizeof(ClientID));
 }
 
 void ControllerSettingsStruct::reset() {
-  UseDNS                     = false;
-  Port                       = 0;
+  UseDNS                     = DEFAULT_SERVER_USEDNS;
+  Port                       = DEFAULT_PORT;
   MinimalTimeBetweenMessages = CONTROLLER_DELAY_QUEUE_DELAY_DFLT;
   MaxQueueDepth              = CONTROLLER_DELAY_QUEUE_DEPTH_DFLT;
   MaxRetry                   = CONTROLLER_DELAY_QUEUE_RETRY_DFLT;
-  DeleteOldest               = false;
+  DeleteOldest               = DEFAULT_CONTROLLER_DELETE_OLDEST;
   ClientTimeout              = CONTROLLER_CLIENTTIMEOUT_DFLT;
-  MustCheckReply             = false;
+  MustCheckReply             = DEFAULT_CONTROLLER_MUST_CHECK_REPLY ;
   SampleSetInitiator         = INVALID_TASK_INDEX;
   VariousFlags               = 0;
 
@@ -77,6 +77,10 @@ void ControllerSettingsStruct::validate() {
   ZERO_TERMINATE(LWTMessageDisconnect);
 }
 
+ChecksumType ControllerSettingsStruct::computeChecksum() const {
+  return ChecksumType(reinterpret_cast<const uint8_t *>(this), sizeof(ControllerSettingsStruct));
+}
+
 IPAddress ControllerSettingsStruct::getIP() const {
   IPAddress host(IP[0], IP[1], IP[2], IP[3]);
 
@@ -115,6 +119,7 @@ bool ControllerSettingsStruct::checkHostReachable(bool quick) {
   return hostReachable(getIP());
 }
 
+#if FEATURE_HTTP_CLIENT
 bool ControllerSettingsStruct::connectToHost(WiFiClient& client) {
   if (!checkHostReachable(true)) {
     return false; // Host not reachable
@@ -134,6 +139,7 @@ bool ControllerSettingsStruct::connectToHost(WiFiClient& client) {
   }
   return false;
 }
+#endif // FEATURE_HTTP_CLIENT
 
 bool ControllerSettingsStruct::beginPacket(WiFiUDP& client) {
   if (!checkHostReachable(true)) {

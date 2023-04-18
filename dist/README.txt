@@ -27,9 +27,11 @@ There is also a number of special builds:
 - normal_beta => "Normal" using the staged (beta) branch of the esp8266/Arduino repository.
 
 Chip can be:
-- ESP8266      => Most likely option
-- ESP8285      => Used in some Sonoff modules
+- ESP8266      => Most likely option  (use also for ESP8285 chips)
 - ESP32        => Showing up in commercial products, but mainly seen on NodeMCU like boards.
+- ESP32-S2     => Newer version of ESP32, with more GPIO pins, but lacking some features of ESP32.
+- ESP32-S3     => Not yet supported in ESPEasy. (hardly available to buy)
+- ESP32-C3     => Support in ESPEasy will be added soon.
 
 MemorySize can be:
 - 1M  => 1 MB flash modules (e.g. almost all Sonoff modules)
@@ -100,19 +102,8 @@ The remedy is often to flash the same build another time via serial.
 There does seem to be some correlation to bad OTA flashes and flash chips made by XMC, but it is not exclusive to this brand of flash chips.
 
 
-ESP.Easy.Flasher.exe...
-... is the new flashing tool for ESP Easy. You need to run it in elevated mode (as admin)
-for it to fetch the COM ports correctly. If you want you may save YOUR settings using the
-"Save as default settings" button in the lower left corner. If the window is too big or
-too small you can experiment with the "Pixels Per Inch" variable in the
-..\Settings\Default.ini file. Setting it to =96 is working for most users but the
-application will try to find the most optimal value by default. Sometimes it fails to
-do that. More information about the tool is found here:
-https://github.com/Grovkillen/ESP_Easy_Flasher
-You can also have custom serial commands entered in a txt file. One command per line.
-
-
-For flashing ESP32 you need Espressif's own Flash Download Tools.
+For flashing it is advised to use Espressif's own Flash Download Tools.
+A recent version is included in the .zip file.
 The latest version can be downloaded from: https://www.espressif.com/en/support/download/other-tools
 
 

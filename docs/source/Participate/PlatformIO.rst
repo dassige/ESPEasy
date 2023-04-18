@@ -1,3 +1,5 @@
+.. _PlatformIO_page:
+
 PlatformIO
 **********
 
@@ -10,14 +12,13 @@ PlatformIO is just the build, test and upload environment for many micro control
 
 On top of that you need to use an editor, or so called IDE in which PlatformIO will be used.
 
-The two main choices are:
+The current choice is:
 
-* Atom
-* Microsoft Visual Studio Code. (MS VS-Code)
+* Microsoft Visual Studio Code. (MS VSCode)
 
-Both are free to use and are available for Windows, MacOS and Linux.
+VSCode is free to use and available for Windows, MacOS and Linux.
 
-Apart from these two, there are more available, like Eclipse and probably more.
+Apart from VSCode, there are more available, like Eclipse, MS Visual Studio (IDE) and probably more.
 
 
 PlatformIO Prerequisites
@@ -34,55 +35,51 @@ Starting October 2019, Python 3.x is supported in all build tools we use for ESP
 Please follow `these steps <https://docs.platformio.org/en/latest/faq.html#faq-install-python>`_ to 
 install Pyton in Windows for PlatformIO.
 
-**Do not forget to check "Add Python xxx to PATH".**
+.. warning:: Do not forget to check "Add Python xxx to PATH".
 
-Windows ExecutionPolicy
------------------------
+.. Windows ExecutionPolicy
+.. -----------------------
 
-For PlatformIO 4.1.x and newer in Windows, you may need to change the Windows ExecutionPolicy 
-to be able to start a powershell script.
-PlatformIO does use a PowerShell script to activate the Python virtual environment.
+.. For PlatformIO 4.1.x and newer in Windows, you may need to change the Windows ExecutionPolicy 
+.. to be able to start a powershell script.
+.. PlatformIO does use a PowerShell script to activate the Python virtual environment.
 
-Default Windows security settings prevent execution of a PowerShell script.
+.. Default Windows security settings prevent execution of a PowerShell script.
 
-Enter in the PowerShell terminal window in VScode:
+.. Enter in the PowerShell terminal window in VScode:
 
-.. code-block:: none
+.. .. code-block:: none
 
-    Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope CurrentUser
+..     Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope CurrentUser
 
-Please note this does lower your security, so make sure you know its implications.
-See `Microsoft - About Execution Policies <https:/go.microsoft.com/fwlink/?LinkID=135170>`_ for more details.
-
-
-PlatformIO with Atom
-====================
+.. Please note this does lower your security, so make sure you know its implications.
+.. See `Microsoft - About Execution Policies <https:/go.microsoft.com/fwlink/?LinkID=135170>`_ for more details.
 
 
+These steps have been explained in this Youtube video: https://youtu.be/ArqwMcYSMsU though you might want to use the latest version of both the Git tools and Python.
 
-PlatformIO with VS-Code
-=======================
+PlatformIO with VSCode
+======================
 
 Install
 -------
 
-For development of ESPeasy, a number of extensions has to be installed in VS-Code:
+For development of ESPEasy, a number of extensions has to be installed in VS-Code:
 
 * PlatformIO IDE (by PlatformIO)
 * C/C++ IntelliSense (by Microsoft)
-* Arduino for Visual Studio Code (by Microsoft)
 * Uncrustify (by Zachary Flower, originally by Laurent Tréguier)
 
 Optional, but highly recommended:
 
 * Bookmarks (by Alessandro Fragnani)
-* GitLens - Git supercharged (by Eric Amodio)
+* GitLens - Git supercharged (by Gitkraken)
 * Todo Tree (by Gruntfuggly)
 * All Autocomplete (by Atishay Jain)
 * Excel Viewer (by GrapeCity)
-* esbonio - An extension for editing sphinx projects (by Swyddfa)
-* reStructuredText - for .rst language support (by LeXtudio Inc.)
+* Esbonio - An extension for editing sphinx projects (by Swyddfa)
 * reStructuredText Syntax highlighting (by Trond Snekvik)
+* Extension pack for reStructuredText (by LeXtudio Inc.)
 * Markdown All in One (by Yu Zhang)
 
 
@@ -93,6 +90,8 @@ The extension Uncrustify is mainly to format the code using a standard code form
 This code format standard is defined in the file uncrustify.cfg in the main directory of this repository.
 For new code contributions, it is highly appreciated if the code is formatted using this tool.
 
+NB: Uncrustify has to be installed separately, as it is not included in the plugin! Download `Uncrustify from Sourceforge.net <https://sourceforge.net/projects/uncrustify/>`_
+
 To do so:
 
 * Right click mouse in editor
@@ -102,12 +101,15 @@ The first time (after installing uncrustify) it must be confirmed to use Uncrust
 
 After setting it as the default formatter, the hotkey Alt-Shift-F (Cmd-Shift-F on MacOS) can be used to format the entire document.
 
+.. note:: 
+
+  There used to be a reference to the Atom editor, but both Atom, and the PlatformIO plugin for Atom, are no longer maintained by their owners, so it was removed from this documentation.
 
 Load a project using PlatformIO
 -------------------------------
 
 If you have PIO installed and the source tree cloned to your hard drive, then you can open the main dir of the repository.
-The main directory of the repository is the level with platformio.ini in it.
+The main directory of the repository is the level with the file platformio.ini in it.
 
 Then in a few moments after opening the directory, on the left there will appear an alien logo, the logo of PlatformIO.
 If you click that one, you will get a tree with lots and lots of project tasks and environments.
@@ -132,26 +134,29 @@ The environment definitions all have at least the used micro controller in the n
 For example:
 
 * ..._ESP8266_4Mnn -> ESP8266 has external flash, which can vary in size from 512 kB to 16 MB, with nn configured as filesystem.
-* ..._ESP8285_1M -> ESP8285 has the flash internal, so is always 1 MB.
+* ..._ESP8266_1M -> ESP8285 has the flash internal, which is almost always 1 MB. ESP8266 does have an external flash chip, which allows for exchanging it for a larger flash chip (recommended).
 * ..._ESP32_4M316k -> ESP32 with 4 MB flash and a 1.8 MB partition for the sketch. (316k SPIFFS)
-* ..._ESP32_16M2M_LittleFS -> ESP32 with 16 MB flash and a 4 MB partition for the sketch. (2MB LittleFS)
+* ..._ESP32s2_4M316k -> ESP32s2 with 4 MB flash and a 1.8 MB partition for the sketch. (316k SPIFFS)
+* ..._ESP32_16M8M_LittleFS -> ESP32 with 16 MB flash and a 4 MB partition for the sketch. (8MB LittleFS)
 * ..._ESP32_16M1M_ETH -> ESP32 with 16 MB flash and a 4 MB partition for the sketch. (1MB SPIFFS, Wired ethernet support)
 
 Make a custom build using PlatformIO
 ------------------------------------
 
-The easiest is to go for the environment "custom_ESP8266_4M1M" and unfold that one.
-Then select "Build" to see if it will start building.
+The easiest is to go for the environment ``custom_ESP8266_4M1M`` and unfold that one.
+Then select ``Build`` to see if it will start building.
 
-If that's working, you can open the file "pre_custom_esp8266.py" and add or remove the plugins and controllers you need.
-That Python file is used in the "env:custom_ESP8266_4M1M" (or any "custom" build environment) to define what should be embedded and what not.
+If that's working, you can open the file ``pre_custom_esp8266.py`` and add or remove the plugins and controllers you need.
+That Python file is used in the ``env:custom_ESP8266_4M1M`` (or any ``custom`` build environment) to define what should be embedded and what not.
 
-For example to have only the controller "C014", you can remove "CONTROLLER_SET_ALL", and just add "USES_C014", 
+For example to have only the controller ``C014``, you can remove ``CONTROLLER_SET_ALL``, and just add ``USES_C014``, 
 The same for the plugins you need.
 
-The file is built in the ".pio/build/...." directory right under the main repository directory (the one with the platformio.ini in it)
+The file is built in the ``.pio/build/....`` directory right under the main repository directory (the one with the platformio.ini in it)
 
-Instead of modifying "pre_custom_esp8266.py" (or "pre_custom_esp32.py" for that matter), one can also copy "src/Custom-sample.h" to "src/Custom.h" and make the desired changed in this file. This file is excluded from Github, so can be adjusted to your own requirements. When the Custom.h file is there (mind the uppercase C!), it will be used by the build scripts instead of the defaults set by "pre_custom_esp8266.py" (or "pre_custom_esp32.py").
+Instead of modifying ``pre_custom_esp8266.py`` (or ``pre_custom_esp32.py`` for that matter), one can also copy ``src/Custom-sample.h`` to ``src/Custom.h`` and make the desired changed in this file. This file is excluded from Github, so can be adjusted to your own requirements. When the Custom.h file is there (mind the uppercase C!), it will be used by the build scripts instead of the defaults set by ``pre_custom_esp8266.py`` (or ``pre_custom_esp32.py``).
+
+.. note:: Custom IR builds have their own ``pre_custom_esp8266_IR.py`` or ``pre_custom_esp32_IR.py`` file.
 
 All builds will be made in a directory with the same name as the environment used.
 
@@ -191,6 +196,10 @@ The global steps described here are:
 - Write documentation on the changes you made
 - Commit your code and create a pull request on Github to publish your changes to the world
 - Regular maintenance of your fork (housekeeping)
+
+Advanced procedures:
+
+- Get a pull request by someone else on your system to create a local custom build
 
 Let's get started!
 
@@ -304,7 +313,7 @@ Create a new branch
 
 As shown above, the git workflow starts by creating a new branch to do the development work in. This will record all changes to the sourcecode you make, and can be put in as a pull request (explained below) for ESPEasy.
 
-A new branch is created by clicking on the 'mega' branch name (lower left in the status bar of VSCode) and selecting the option 'Create new branch...' from the list presented at the mille-top of the VSCode window. Then a new braanch name should be typed. Branch naming does use some conventions. New features are often named like 'feature/purpose-of-the-feature', and bugfixes are usually named like 'bugfix/what-is-to-be-fixed'. For the addition of this documentation, I've created a branch named 'feature/how-to-guide-for-new-developers':
+A new branch is created by clicking on the 'mega' branch name (lower left in the status bar of VSCode) and selecting the option 'Create new branch...' from the list presented at the middle-top of the VSCode window. Then a new braanch name should be typed. Branch naming does use some conventions. New features are often named like 'feature/purpose-of-the-feature', and bugfixes are usually named like 'bugfix/what-is-to-be-fixed'. For the addition of this documentation, I've created a branch named 'feature/how-to-guide-for-new-developers':
 
 .. image:: VSCode_create_branch.png
     :alt: VSCode create branch
@@ -342,7 +351,30 @@ Instead of just changing an existing plugin or some other feature of ESPEasy, al
 
 It requires sufficient testing, and analysis of the runtime behavior, of that piece of code, before it should be submitted for a pull request.
 
-Especially for new plugins, it is highly recommended to write documentation, as explained in the next paragraph.
+When creating a new plugin, a request for an available plugin ID should be posted in this support issue: `[Plugins] List of planned new plugins (request a Plugin-ID here) <https://github.com/letscontrolit/ESPEasy/issues/3839>`_
+
+Especially for new plugins, it is highly recommended to write documentation, as explained in paragraph **Writing documentation**, below.
+
+
+Using external libraries
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note:: 
+    Since November 2022, the PlatformIO configuration for ESPEasy was changed to *require* all libraries to be locally available, to a) prevent unexpected 'surprises' when an external library is updated, and b) greatly improve build output stability and quality.
+
+While developing a plugin or some other feature, often you use an existing library to re-use that (assumably) proven and tested functionality. To include such library, there is a prerequisite, and some generic steps to take:
+
+Prerequisite:
+
+- The library should have a valid ``library.json`` or ``library.properties`` file (both is also fine).
+
+Procedure:
+
+- Create a new folder in the ``lib`` subfolder of this repository, and give that the name of the library.
+- Copy all files, preferrably excluding the ``.git`` folder that is created when cloning a git repository, into the new folder.
+- In your source, reference the library by using ``#include <main_h_file.h>``, where the ``<>`` should stay, and ``main_h_file.h`` should be replaced by the needed .h file for the library. Multiple .h files can of course be included, as needed for using the required features.
+- Include all files of the library in the (first) pull request for your changes, so the Github Actions build can also use it.
+
 
 Writing documentation
 ---------------------
@@ -365,6 +397,14 @@ When adding screenshots it is advised to use the ``.png`` file format, as that u
 Documentation for writing in reStructuredtext format can be found on the `Sphinx website <https://www.sphinx-doc.org/en/master/>`_
 
 Building the documentation into html files, for reviewing locally, can be done by running this command from the ``docs`` folder:
+
+Start a new PIO Terminal:
+
+.. image:: VSCode_OpenPIOTerminal.png
+
+.. code-block::
+
+    cd docs
 
 On Windows:
 
@@ -452,7 +492,7 @@ The update is 'pulled' (git terminology) by getting the latest from the ``upstre
 
 (NB: The current development branch of ESPEasy is called ``mega`` where other Github repos often use ``master``, or ``main``. ESPEasy *does* have a ``master`` branch, but it currently isn't actively maintained. The name of the 'main' branch of any repository can be chosen freely, the ``master`` or ``main`` name is just used by convention.)
 
-Depending on the time passed since the last update, some files will be updated from the git pull command.
+Depending on the time passed since the last update and the changes made, some files will be updated from the git pull command.
 
 To update your fork on Github, these changes should be 'pushed' (git terminology) to your fork by using the command:
 
@@ -463,4 +503,49 @@ To update your fork on Github, these changes should be 'pushed' (git terminology
 If this is the first time you try to push any changes to your repository, VSCode, or actually the GitLens plugin, will ask for your Github credentials, and will switch back and forth a few times between your webbrowser and VSCode to complete the authentication process. This is as intended.
 
 Updating your fork this way should be done at least every time before you start new work, and can be done more often if desired. If kept up to date you will avoid starting with an out-dated state of the repository.
+
+
+Get a pull request by someone else on your system
+-------------------------------------------------
+
+For those that want to test the code from a pull request, created by someone else, these commands can be used to get that code local:
+
+1. Update your local repository to the latest git status on the server:
+
+.. code-block::
+
+    git checkout mega
+
+    git pull upstream mega
+
+    git push
+
+2. Create a local branch to avoid cluttering your regular ``mega`` branch: (I've deliberately used plural ``pulls`` as a local folder to distinguish from the remote ``pull`` folder on Github)
+
+.. note:: 
+    For ``<prnumber>`` the pull request number (digits only, not including the # prefix!), as visible on the Github Pull requests tab of the ``letscontrolit/ESPEasy`` repository should be used.
+
+.. code-block::
+
+    git checkout -b pulls/<prnumber>
+
+3. Download (fetch) the latest code (head) from the pull request on github into your local git repository
+
+.. code-block::
+
+    git fetch upstream pull/<prnumber>/head
+
+4. Apply (pull) the latest fetched code (head) to the current branch (``pulls/<prnumber>``)
+
+.. code-block::
+
+    git pull upstream pull/<prnumber>/head
+
+5. Build the desired PIO environment, or add the (new?) plugin to your Custom.h file to create your local Custom build. Like described above, you can also add a plugin to the ``pre_custom_esp8266.py`` or ``pre_custom_esp32.py`` Python scripts (when *not* having a Custom.h file, as that will be used for any Custom build first).
+
+6. To update your local code after the PR has been updated on github, repeat step **3.** and **4.** within the branch created in step **2.** active (``git checkout pulls/<prnumber>``).
+
+.. warning:: 
+    This method does not enable or allow to contribute to that PR, that requires a different, somewhat more complicated, procedure, not documented here though available in the Github documentation.
+
 

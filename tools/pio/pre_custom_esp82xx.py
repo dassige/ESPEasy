@@ -42,28 +42,31 @@ else:
 #    "-DUSES_P080",  # Dallas iButton
     "-DUSES_P081",  # Cron
     "-DUSES_P082",  # GPS
-    "-DUSES_P085",  # AcuDC24x
+#   "-DUSES_P085",  # AcuDC24x
     "-DUSES_P098",  # PWM motor
-
-    "-DUSES_P100",  # Pulse Counter - DS2423
+#   "-DUSES_P100",  # Pulse Counter - DS2423
 #   "-DUSES_P087",  # Serial Proxy
 #   "-DUSES_P094",  # CUL Reader
 #   "-DUSES_P095",  # TFT ILI9341
 #    "-DUSES_P106",  # BME680
 #    "-DUSES_P107",  # SI1145 UV index
 
+    "-DUSES_P146",  # Cache Reader
+
     "-DUSES_C016",  # Cache Controller
     "-DUSES_C018",  # TTN/RN2483
 #   "-DUSES_C015",  # Blynk
 
-#    "-DFEATURE_MDNS",
-#    "-DFEATURE_SD",
-    "-DUSE_EXT_RTC",
-    "-DFEATURE_I2CMULTIPLEXER",
-    "-DUSE_TRIGONOMETRIC_FUNCTIONS_RULES",
-    "-DUSE_CUSTOM_PROVISIONING",
+#    "-DFEATURE_MDNS=1",
+#    "-DFEATURE_SD=1",
+    "-DFEATURE_EXT_RTC=1",
+    "-DFEATURE_I2CMULTIPLEXER=1",
+    "-DFEATURE_TRIGONOMETRIC_FUNCTIONS_RULES=1",
+    "-DFEATURE_CUSTOM_PROVISIONING=1",
 
-    "-DUSE_SETTINGS_ARCHIVE"
+    "-DFEATURE_ESPEASY_P2P=1",
+
+    "-DFEATURE_SETTINGS_ARCHIVE=1"
   ]
 
 my_flags = env.ParseFlags(env['BUILD_FLAGS'])
@@ -81,6 +84,5 @@ print("\u001b[32m ------------------------------- \u001b[0m")
 if (len(my_defines) == 0):
   print("\u001b[31m No defines are set, probably configuration error. \u001b[0m")
   raise ValueError
-
 
 

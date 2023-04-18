@@ -6,15 +6,12 @@
 #include "../DataTypes/SPI_options.h"
 #include "../Globals/Plugins.h"
 #include "../Globals/CPlugins.h"
+#include "../Helpers/Misc.h"
+#include "../Helpers/StringParser.h"
 
 #ifndef DATASTRUCTS_SETTINGSSTRUCT_CPP
 #define DATASTRUCTS_SETTINGSSTRUCT_CPP
 
-template<unsigned int N_TASKS>
-SettingsStruct_tmpl<N_TASKS>::SettingsStruct_tmpl() : ResetFactoryDefaultPreference(0) { //-V730
-  clearAll();
-  clearNetworkSettings();
-}
 
 // VariousBits1 defaults to 0, keep in mind when adding bit lookups.
 template<unsigned int N_TASKS>
@@ -83,11 +80,7 @@ void SettingsStruct_tmpl<N_TASKS>::EcoPowerMode(bool value) {
 
 template<unsigned int N_TASKS>
 bool SettingsStruct_tmpl<N_TASKS>::WifiNoneSleep() const {
-  #ifdef ESP32
-  return true;
-  #else
   return bitRead(VariousBits1, 7);
-  #endif
 }
 
 template<unsigned int N_TASKS>
@@ -128,12 +121,18 @@ void SettingsStruct_tmpl<N_TASKS>::SendToHttp_ack(bool value) {
 
 template<unsigned int N_TASKS>
 bool SettingsStruct_tmpl<N_TASKS>::UseESPEasyNow() const {
+#ifdef USES_ESPEASY_NOW
   return bitRead(VariousBits1, 11);
+#else
+  return false;
+#endif
 }
 
 template<unsigned int N_TASKS>
 void SettingsStruct_tmpl<N_TASKS>::UseESPEasyNow(bool value) {
+#ifdef USES_ESPEASY_NOW
   bitWrite(VariousBits1, 11, value);
+#endif
 }
 
 template<unsigned int N_TASKS>
@@ -296,6 +295,104 @@ void SettingsStruct_tmpl<N_TASKS>::AllowOTAUnlimited(bool value) {
 }
 
 template<unsigned int N_TASKS>
+bool SettingsStruct_tmpl<N_TASKS>::SendToHTTP_follow_redirects() const {
+  return bitRead(VariousBits1, 27);
+}
+
+template<unsigned int N_TASKS>
+void SettingsStruct_tmpl<N_TASKS>::SendToHTTP_follow_redirects(bool value) {
+  bitWrite(VariousBits1, 27, value);
+}
+
+#if FEATURE_AUTO_DARK_MODE
+template<unsigned int N_TASKS>
+uint8_t SettingsStruct_tmpl<N_TASKS>::getCssMode() const {
+  return get2BitFromUL(VariousBits1, 28); // Also occupies bit 29!
+}
+
+template<unsigned int N_TASKS>
+void SettingsStruct_tmpl<N_TASKS>::setCssMode(uint8_t value) {
+  set2BitToUL(VariousBits1, 28, value); // Also occupies bit 29!
+}
+#endif // FEATURE_AUTO_DARK_MODE
+
+#if FEATURE_I2C_DEVICE_CHECK
+template<unsigned int N_TASKS>
+bool SettingsStruct_tmpl<N_TASKS>::CheckI2Cdevice() const { // Inverted
+  return !bitRead(VariousBits1, 30);
+}
+
+template<unsigned int N_TASKS>
+void SettingsStruct_tmpl<N_TASKS>::CheckI2Cdevice(bool value) { // Inverted
+  bitWrite(VariousBits1, 30, !value);
+}
+#endif // if FEATURE_I2C_DEVICE_CHECK
+
+
+template<unsigned int N_TASKS>
+bool SettingsStruct_tmpl<N_TASKS>::WaitWiFiConnect() const { 
+  return bitRead(VariousBits2, 0);
+}
+
+template<unsigned int N_TASKS>
+void SettingsStruct_tmpl<N_TASKS>::WaitWiFiConnect(bool value) { 
+  bitWrite(VariousBits2, 0, value);
+}
+
+
+template<unsigned int N_TASKS>
+bool SettingsStruct_tmpl<N_TASKS>::SDK_WiFi_autoreconnect() const { 
+  return bitRead(VariousBits2, 1);
+}
+
+template<unsigned int N_TASKS>
+void SettingsStruct_tmpl<N_TASKS>::SDK_WiFi_autoreconnect(bool value) { 
+  bitWrite(VariousBits2, 1, value);
+}
+
+
+
+template<unsigned int N_TASKS>
+bool SettingsStruct_tmpl<N_TASKS>::isTaskEnableReadonly(taskIndex_t taskIndex) const {
+  if (validTaskIndex(taskIndex)) {
+    return bitRead(VariousTaskBits[taskIndex], 0);
+  }
+  return false;
+}
+
+template<unsigned int N_TASKS>
+void SettingsStruct_tmpl<N_TASKS>::setTaskEnableReadonly(taskIndex_t taskIndex, bool value) {
+  if (validTaskIndex(taskIndex)) {
+    bitWrite(VariousTaskBits[taskIndex], 0, value);
+  }
+}
+
+#if FEATURE_PLUGIN_PRIORITY
+template<unsigned int N_TASKS>
+bool SettingsStruct_tmpl<N_TASKS>::isPowerManagerTask(taskIndex_t taskIndex) const {
+  if (validTaskIndex(taskIndex)) {
+    return bitRead(VariousTaskBits[taskIndex], 1);
+  }
+  return false;
+}
+
+template<unsigned int N_TASKS>
+void SettingsStruct_tmpl<N_TASKS>::setPowerManagerTask(taskIndex_t taskIndex, bool value) {
+  if (validTaskIndex(taskIndex)) {
+    bitWrite(VariousTaskBits[taskIndex], 1, value);
+  }
+}
+
+template<unsigned int N_TASKS>
+bool SettingsStruct_tmpl<N_TASKS>::isPriorityTask(taskIndex_t taskIndex) const {
+  if (validTaskIndex(taskIndex)) {
+    return isPowerManagerTask(taskIndex); // Add more?
+  }
+  return false;
+}
+#endif // if FEATURE_PLUGIN_PRIORITY
+
+template<unsigned int N_TASKS>
 ExtTimeSource_e SettingsStruct_tmpl<N_TASKS>::ExtTimeSource() const {
   return static_cast<ExtTimeSource_e>(ExternalTimeSource >> 1);
 }
@@ -328,7 +425,7 @@ void SettingsStruct_tmpl<N_TASKS>::validate() {
 
   if ((Longitude < -180.0f) || (Longitude > 180.0f)) { Longitude = 0.0f; }
 
-  if (VariousBits1 > (1 << 30)) { VariousBits1 = 0; }
+  if (VariousBits1 > (1 << 31)) { VariousBits1 = 0; } // FIXME: Check really needed/useful?
   ZERO_TERMINATE(Name);
   ZERO_TERMINATE(NTPHost);
 
@@ -420,12 +517,15 @@ void SettingsStruct_tmpl<N_TASKS>::clearMisc() {
   Pin_i2c_scl              = DEFAULT_PIN_I2C_SCL;
   Pin_status_led           = DEFAULT_PIN_STATUS_LED;
   Pin_sd_cs                = -1;
+#ifdef ESP32
+  // Ethernet related settings are never used on ESP8266
   ETH_Phy_Addr             = DEFAULT_ETH_PHY_ADDR;
   ETH_Pin_mdc              = DEFAULT_ETH_PIN_MDC;
   ETH_Pin_mdio             = DEFAULT_ETH_PIN_MDIO;
   ETH_Pin_power            = DEFAULT_ETH_PIN_POWER;
   ETH_Phy_Type             = DEFAULT_ETH_PHY_TYPE;
   ETH_Clock_Mode           = DEFAULT_ETH_CLOCK_MODE;
+#endif
   NetworkMedium            = DEFAULT_NETWORK_MEDIUM;
 
   I2C_clockSpeed_Slow      = DEFAULT_I2C_CLOCK_SPEED_SLOW;
@@ -484,36 +584,30 @@ void SettingsStruct_tmpl<N_TASKS>::clearMisc() {
   gratuitousARP(DEFAULT_GRATUITOUS_ARP);
   TolerantLastArgParse(DEFAULT_TOLERANT_LAST_ARG_PARSE);
   SendToHttp_ack(DEFAULT_SEND_TO_HTTP_ACK);
+  #ifdef USES_ESPEASY_NOW
+  UseESPEasyNow(DEFAULT_USE_ESPEASYNOW);
+  #else
+  UseESPEasyNow(false);
+  #endif
   ApDontForceSetup(DEFAULT_AP_DONT_FORCE_SETUP);
   DoNotStartAP(DEFAULT_DONT_ALLOW_START_AP);
 }
 
-template<unsigned int N_TASKS>
-void SettingsStruct_tmpl<N_TASKS>::clearAll() {
-  clearMisc();
-  clearTimeSettings();
-  clearNetworkSettings();
-  clearNotifications();
-  clearControllers();
-  clearTasks();
-  clearLogSettings();
-  clearUnitNameSettings();
-}
 
 template<unsigned int N_TASKS>
 void SettingsStruct_tmpl<N_TASKS>::clearTask(taskIndex_t task) {
   if (task >= N_TASKS) { return; }
 
   for (controllerIndex_t i = 0; i < CONTROLLER_MAX; ++i) {
-    TaskDeviceID[i][task]       = 0;
+    TaskDeviceID[i][task]       = 0u;
     TaskDeviceSendData[i][task] = false;
   }
-  TaskDeviceNumber[task]     = 0;
-  OLD_TaskDeviceID[task]     = 0; // UNUSED: this can be removed
+  TaskDeviceNumber[task]     = 0u;
+  OLD_TaskDeviceID[task]     = 0u; // UNUSED: this can be removed
   TaskDevicePin1[task]       = -1;
   TaskDevicePin2[task]       = -1;
   TaskDevicePin3[task]       = -1;
-  TaskDevicePort[task]       = 0;
+  TaskDevicePort[task]       = 0u;
   TaskDevicePin1PullUp[task] = false;
 
   for (uint8_t cv = 0; cv < PLUGIN_CONFIGVAR_MAX; ++cv) {
@@ -528,10 +622,10 @@ void SettingsStruct_tmpl<N_TASKS>::clearTask(taskIndex_t task) {
   for (uint8_t cv = 0; cv < PLUGIN_CONFIGLONGVAR_MAX; ++cv) {
     TaskDevicePluginConfigLong[task][cv] = 0;
   }
-  TaskDeviceSendDataFlags[task]  = 0;
-  OLD_TaskDeviceGlobalSync[task]= 0;
-  TaskDeviceDataFeed[task]      = 0;
-  TaskDeviceTimer[task]         = 0;
+  TaskDeviceSendDataFlags[task]  = 0u;
+  VariousTaskBits[task]         = 0;
+  TaskDeviceDataFeed[task]      = 0u;
+  TaskDeviceTimer[task]         = 0u;
   TaskDeviceEnabled[task]       = false;
   I2C_Multiplexer_Channel[task] = -1;
 }
@@ -543,13 +637,19 @@ String SettingsStruct_tmpl<N_TASKS>::getHostname() const {
 
 template<unsigned int N_TASKS>
 String SettingsStruct_tmpl<N_TASKS>::getHostname(bool appendUnit) const {
-  String hostname = this->Name;
+  String hostname = this->getName();
 
   if ((this->Unit != 0) && appendUnit) { // only append non-zero unit number
     hostname += '_';
     hostname += this->Unit;
   }
   return hostname;
+}
+
+template<unsigned int N_TASKS>
+String SettingsStruct_tmpl<N_TASKS>::getName() const {
+  String unitname = this->Name;
+  return parseTemplate(unitname);
 }
 
 
@@ -638,14 +738,15 @@ bool SettingsStruct_tmpl<N_TASKS>::isSPI_pin(int8_t pin) const {
 
 template<unsigned int N_TASKS>
 bool SettingsStruct_tmpl<N_TASKS>::isSPI_valid() const {
-  return !((InitSPI == static_cast<int>(SPI_Options_e::None)) ||
-           ((InitSPI == static_cast<int>(SPI_Options_e::UserDefined)) &&
-            ((SPI_SCLK_pin == -1) ||
+  if (InitSPI == static_cast<uint8_t>(SPI_Options_e::None)) return false;
+  if (InitSPI == static_cast<uint8_t>(SPI_Options_e::UserDefined))
+    return !((SPI_SCLK_pin == -1) ||
              (SPI_MISO_pin == -1) ||
              (SPI_MOSI_pin == -1) ||
              (SPI_SCLK_pin == SPI_MISO_pin) ||
              (SPI_MISO_pin == SPI_MOSI_pin) ||
-             (SPI_MOSI_pin == SPI_SCLK_pin)))); // Checks
+             (SPI_MOSI_pin == SPI_SCLK_pin));
+  return true;
 }
 
 template<unsigned int N_TASKS>
@@ -664,7 +765,7 @@ bool SettingsStruct_tmpl<N_TASKS>::isI2CEnabled() const {
 
 template<unsigned int N_TASKS>
 bool SettingsStruct_tmpl<N_TASKS>::isEthernetPin(int8_t pin) const {
-  #ifdef HAS_ETHERNET
+  #if FEATURE_ETHERNET
   if (pin < 0) return false;
   if (NetworkMedium == NetworkMedium_t::Ethernet) {
     if (19 == pin) return true; // ETH TXD0
@@ -674,21 +775,22 @@ bool SettingsStruct_tmpl<N_TASKS>::isEthernetPin(int8_t pin) const {
     if (26 == pin) return true; // ETH RXD1
     if (27 == pin) return true; // ETH CRS_DV
   }
-  #endif
+  #endif // if FEATURE_ETHERNET
   return false;
 }
 
 
 template<unsigned int N_TASKS>
 bool SettingsStruct_tmpl<N_TASKS>::isEthernetPinOptional(int8_t pin) const {
-  #ifdef HAS_ETHERNET
+  #if FEATURE_ETHERNET
   if (pin < 0) return false;
   if (NetworkMedium == NetworkMedium_t::Ethernet) {
+    if (isGpioUsedInETHClockMode(ETH_Clock_Mode, pin)) return true;
     if (ETH_Pin_mdc == pin) return true;
     if (ETH_Pin_mdio == pin) return true;
     if (ETH_Pin_power == pin) return true;
   }
-  #endif
+  #endif // if FEATURE_ETHERNET
   return false;
 }
 

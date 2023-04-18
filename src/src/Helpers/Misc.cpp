@@ -14,7 +14,7 @@
 #include "../Helpers/StringConverter.h"
 #include "../Helpers/StringParser.h"
 
-#ifdef FEATURE_SD
+#if FEATURE_SD
 #include <SD.h>
 #endif
 
@@ -28,10 +28,10 @@ bool remoteConfig(struct EventStruct *event, const String& string)
   bool   success = false;
   String command = parseString(string, 1);
 
-  if (command == F("config"))
+  if (equals(command, F("config")))
   {
     // Command: "config,task,<taskname>,<actual Set Config command>"
-    if (parseString(string, 2) == F("task"))
+    if (equals(parseString(string, 2), F("task")))
     {
       String configTaskName = parseStringKeepCase(string, 3);
 
@@ -128,10 +128,12 @@ void taskClear(taskIndex_t taskIndex, bool save)
   checkRAM(F("taskClear"));
   #endif // ifndef BUILD_NO_RAM_TRACKER
   Settings.clearTask(taskIndex);
-  ExtraTaskSettings.clear(); // Invalidate any cached values.
+  clearTaskCache(taskIndex); // Invalidate any cached values.
+  ExtraTaskSettings.clear(); 
   ExtraTaskSettings.TaskIndex = taskIndex;
 
   if (save) {
+    addLog(LOG_LEVEL_INFO, F("taskClear() save settings"));
     SaveTaskSettings(taskIndex);
     SaveSettings();
   }
@@ -210,8 +212,7 @@ void dump(uint32_t addr) { // Seems already included in core 2.4 ...
    Handler for keeping ExtraTaskSettings up to date using cache
  \*********************************************************************************************/
 String getTaskDeviceName(taskIndex_t TaskIndex) {
-  LoadTaskSettings(TaskIndex);
-  return ExtraTaskSettings.TaskDeviceName;
+  return Cache.getTaskDeviceName(TaskIndex);
 }
 
 /********************************************************************************************\
@@ -221,10 +222,11 @@ String getTaskDeviceName(taskIndex_t TaskIndex) {
    - maximum number of variables <= defined number of variables in plugin
  \*********************************************************************************************/
 String getTaskValueName(taskIndex_t TaskIndex, uint8_t TaskValueIndex) {
-  TaskValueIndex = (TaskValueIndex < getValueCountForTask(TaskIndex) ? TaskValueIndex : getValueCountForTask(TaskIndex));
-
-  LoadTaskSettings(TaskIndex);
-  return ExtraTaskSettings.TaskDeviceValueNames[TaskValueIndex];
+  const int valueCount = getValueCountForTask(TaskIndex);
+  if (TaskValueIndex < valueCount) {
+    return Cache.getTaskDeviceValueName(TaskIndex, TaskValueIndex);
+  }
+  return EMPTY_STRING;
 }
 
 /********************************************************************************************\
@@ -282,18 +284,21 @@ void FeedSW_watchdog()
 
 void SendValueLogger(taskIndex_t TaskIndex)
 {
-#if !defined(BUILD_NO_DEBUG) || defined(FEATURE_SD)
+#if !defined(BUILD_NO_DEBUG) || FEATURE_SD
   bool   featureSD = false;
   String logger;
-  # ifdef FEATURE_SD
+  # if FEATURE_SD
   featureSD = true;
-  # endif // ifdef FEATURE_SD
+  # endif // if FEATURE_SD
 
-  if (featureSD || loglevelActiveFor(LOG_LEVEL_DEBUG)) {
+  if (featureSD 
+      # ifndef BUILD_NO_DEBUG
+      || loglevelActiveFor(LOG_LEVEL_DEBUG)
+      #endif
+  ) {
     const deviceIndex_t DeviceIndex = getDeviceIndex_from_TaskIndex(TaskIndex);
 
     if (validDeviceIndex(DeviceIndex)) {
-      LoadTaskSettings(TaskIndex);
       const uint8_t valueCount = getValueCountForTask(TaskIndex);
 
       for (uint8_t varNr = 0; varNr < valueCount; varNr++)
@@ -306,17 +311,19 @@ void SendValueLogger(taskIndex_t TaskIndex)
         logger += ',';
         logger += getTaskDeviceName(TaskIndex);
         logger += ',';
-        logger += ExtraTaskSettings.TaskDeviceValueNames[varNr];
+        logger += getTaskValueName(TaskIndex, varNr);
         logger += ',';
         logger += formatUserVarNoCheck(TaskIndex, varNr);
         logger += F("\r\n");
       }
+      # ifndef BUILD_NO_DEBUG
       addLog(LOG_LEVEL_DEBUG, logger);
+      #endif
     }
   }
-#endif // if !defined(BUILD_NO_DEBUG) || defined(FEATURE_SD)
+#endif // if !defined(BUILD_NO_DEBUG) || FEATURE_SD
 
-#ifdef FEATURE_SD
+#if FEATURE_SD
   String filename = F("VALUES.CSV");
   fs::File   logFile  = SD.open(filename, FILE_WRITE);
 
@@ -324,7 +331,7 @@ void SendValueLogger(taskIndex_t TaskIndex)
     logFile.print(logger);
   }
   logFile.close();
-#endif // ifdef FEATURE_SD
+#endif // if FEATURE_SD
 }
 
 // #######################################################################################################
@@ -407,6 +414,44 @@ void HSV2RGBW(float H, float S, float I, int rgbw[4]) {
   rgbw[1] = g;
   rgbw[2] = b;
   rgbw[3] = w;
+}
+
+// Convert RGB Color to HSV Color
+void RGB2HSV(uint8_t r, uint8_t g, uint8_t b, float hsv[3]) {
+  float rf     = static_cast<float>(r) / 255.0f;
+  float gf     = static_cast<float>(g) / 255.0f;
+  float bf     = static_cast<float>(b) / 255.0f;
+  float maxval = rf;
+
+  if (gf > maxval) { maxval = gf; }
+
+  if (bf > maxval) { maxval = bf; }
+  float minval = rf;
+
+  if (gf < minval) { minval = gf; }
+
+  if (bf < minval) { minval = bf; }
+  float h = 0.0f, s, v = maxval;
+  float f = maxval - minval;
+
+  s = maxval == 0.0f ? 0.0f : f / maxval;
+
+  if (maxval == minval) {
+    h = 0.0f; // achromatic
+  } else {
+    if (maxval == rf) {
+      h = (gf - bf) / f + (gf < bf ? 6.0f : 0.0f);
+    } else if (maxval == gf) {
+      h = (bf - rf) / f + 2.0f;
+    } else if (maxval == bf) {
+      h = (rf - gf) / f + 4.0f;
+    }
+    h /= 6.0f;
+  }
+
+  hsv[0] = h * 360.0f;
+  hsv[1] = s * 255.0f;
+  hsv[2] = v * 255.0f;
 }
 
 // Simple bitwise get/set functions

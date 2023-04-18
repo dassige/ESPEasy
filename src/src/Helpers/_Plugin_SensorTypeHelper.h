@@ -5,19 +5,7 @@
 
 #include "../DataStructs/DeviceStruct.h"
 
-/*********************************************************************************************\
-   Get value count from sensor type
-
-   Only use this function to determine nr of output values when changing output type of a task
-   To get the actual output values for a task, use getValueCountForTask
-\*********************************************************************************************/
-uint8_t getValueCountFromSensorType(Sensor_VType sensorType);
-
-const __FlashStringHelper * getSensorTypeLabel(Sensor_VType sensorType);
-
 void sensorTypeHelper_webformLoad_allTypes(struct EventStruct *event, uint8_t pconfigIndex);
-
-void sensorTypeHelper_webformLoad_header();
 
 void sensorTypeHelper_webformLoad_simple(struct EventStruct *event, uint8_t pconfigIndex);
 

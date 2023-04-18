@@ -11,7 +11,7 @@
 //   Oct-12-2020: Creation
 //   Oct-16-2020: Beta Test Release to ESPEasy Forum.
 //   Oct-18-2020: Re-assigned as plugin number P101 (was P248).
-//   Oct-20-2020: Github PR #3328, Submitted as [Testing] plugin.
+//   Oct-20-2020: Github PR #3328, Submitted as plugin.
 //
 // This ESPEasy plugin requires the WakeOnLan library found here:
 //   https://github.com/a7md0/WakeOnLan
@@ -55,13 +55,14 @@
 // Plugin defines
 #define PLUGIN_101
 #define PLUGIN_ID_101      101
-#define PLUGIN_NAME_101    "Communication - Wake On LAN [Testing]"
+#define PLUGIN_NAME_101    "Communication - Wake On LAN"
 
 // Config Setting defines
 #define CUSTOMTASK_STR_SIZE_P101 20
 #define DEF_TASK_NAME_P101 "WAKE_ON_LAN"
-#define UDP_PORT_P101      ExtraTaskSettings.TaskDevicePluginConfigLong[1]
-#define FORM_PORT_P101     "P101_port"
+#define SET_UDP_PORT_P101  ExtraTaskSettings.TaskDevicePluginConfigLong[1]
+#define GET_UDP_PORT_P101  Cache.getTaskDevicePluginConfigLong(event->TaskIndex, 1)
+#define FORM_PORT_P101     "pport"
 
 // Command keyword defines
 #define CMD_NAME_P101      "WAKEONLAN"
@@ -136,13 +137,13 @@ boolean Plugin_101(uint8_t function, struct EventStruct *event, String& string)
 
     case PLUGIN_SET_DEFAULTS:
     {
-      UDP_PORT_P101 = PORT_DEF_P101;
+      SET_UDP_PORT_P101 = PORT_DEF_P101;
       break;
     }
 
     case PLUGIN_WEBFORM_LOAD: {
-      char   ipString[IP_BUFF_SIZE_P101]   = "";
-      char   macString[MAC_BUFF_SIZE_P101] = "";
+      char   ipString[IP_BUFF_SIZE_P101]   = {0};
+      char   macString[MAC_BUFF_SIZE_P101] = {0};
       String msgStr;
 
       addFormSubHeader(""); // Blank line, vertical space.
@@ -160,7 +161,7 @@ boolean Plugin_101(uint8_t function, struct EventStruct *event, String& string)
 
       safe_strncpy(ipString, strings[0], IP_BUFF_SIZE_P101);
       addFormTextBox(F("IPv4 Address"), getPluginCustomArgName(0), ipString, IP_ADDR_SIZE_P101);
-      addFormNumericBox(F("UDP Port"), F(FORM_PORT_P101), UDP_PORT_P101, 0, PORT_MAX_P101);
+      addFormNumericBox(F("UDP Port"), F(FORM_PORT_P101), GET_UDP_PORT_P101, 0, PORT_MAX_P101);
       msgStr  = F("Typical Installations use IP Address ");
       msgStr += F(IP_STR_DEF_P101);
       msgStr += F(", Port ");
@@ -174,12 +175,10 @@ boolean Plugin_101(uint8_t function, struct EventStruct *event, String& string)
     case PLUGIN_WEBFORM_SAVE: {
       char   ipString[IP_BUFF_SIZE_P101]   = {0};
       char   macString[MAC_BUFF_SIZE_P101] = {0};
-      char   deviceTemplate[2][CUSTOMTASK_STR_SIZE_P101];
+      char   deviceTemplate[2][CUSTOMTASK_STR_SIZE_P101] = {};
       String errorStr;
       String msgStr;
       const String wolStr = F(LOG_NAME_P101);
-
-      LoadTaskSettings(event->TaskIndex);
 
       // Check Task Name.
       uint8_t nameCode = safeName(event->TaskIndex);
@@ -214,18 +213,18 @@ boolean Plugin_101(uint8_t function, struct EventStruct *event, String& string)
         msgStr    = F("Provided IP Invalid (Using Default). ");
         errorStr += msgStr;
         msgStr    = wolStr + msgStr;
-        msgStr   += F("[");
+        msgStr   += '[';
         msgStr   += F(IP_STR_DEF_P101);
-        msgStr   += F("]");
+        msgStr   += ']';
         addLogMove(LOG_LEVEL_INFO, msgStr);
       }
       else if (!validateIp(ipString)) { // Unexpected IP Address value. Leave as-is, but Warn User.
         msgStr    = F("WARNING, Please Review IP Address. ");
         errorStr += msgStr;
         msgStr    = wolStr + msgStr;
-        msgStr   += F("[");
+        msgStr   += '[';
         msgStr   += ipString;
-        msgStr   += F("]");
+        msgStr   += ']';
         addLogMove(LOG_LEVEL_INFO, msgStr);
       }
 
@@ -248,9 +247,9 @@ boolean Plugin_101(uint8_t function, struct EventStruct *event, String& string)
         msgStr    = F("ERROR, MAC Address Invalid. ");
         errorStr += msgStr;
         msgStr    = wolStr + msgStr;
-        msgStr   += F("[");
+        msgStr   += '[';
         msgStr   += macString;
-        msgStr   += F("]");
+        msgStr   += ']';
         addLogMove(LOG_LEVEL_INFO, msgStr);
       }
 
@@ -264,7 +263,7 @@ boolean Plugin_101(uint8_t function, struct EventStruct *event, String& string)
 
       // Save all the Task parameters.
       SaveCustomTaskSettings(event->TaskIndex, reinterpret_cast<const uint8_t *>(&deviceTemplate), sizeof(deviceTemplate));
-      UDP_PORT_P101 = getFormItemInt(F(FORM_PORT_P101));
+      SET_UDP_PORT_P101 = getFormItemInt(F(FORM_PORT_P101));
       success       = true;
       break;
     }
@@ -280,10 +279,10 @@ boolean Plugin_101(uint8_t function, struct EventStruct *event, String& string)
     }
 
     case PLUGIN_WRITE: {
-      char   ipString[IP_BUFF_SIZE_P101]   = "";
-      char   macString[MAC_BUFF_SIZE_P101] = "";
+      char   ipString[IP_BUFF_SIZE_P101]   = {0};
+      char   macString[MAC_BUFF_SIZE_P101] = {0};
       bool   taskEnable                    = false;
-      uint8_t   parse_error                   = false;
+      uint8_t parse_error                  = false;
       String msgStr;
       String strings[2];
       String tmpString    = string;
@@ -299,7 +298,6 @@ boolean Plugin_101(uint8_t function, struct EventStruct *event, String& string)
       if (validTaskIndex(event->TaskIndex) &&
           (cmd.equalsIgnoreCase(F(CMD_NAME_P101)) ||
            cmd.equalsIgnoreCase(getTaskDeviceName(event->TaskIndex)))) {
-        LoadTaskSettings(event->TaskIndex);
         taskEnable = Settings.TaskDeviceEnabled[event->TaskIndex];
 
         // Do not process WOL command if plugin disabled. This code is for errant situations which may never occur.
@@ -330,7 +328,8 @@ boolean Plugin_101(uint8_t function, struct EventStruct *event, String& string)
         }
 
         if (paramPort.isEmpty()) {
-          int portNumber = UDP_PORT_P101; // Get default Port from user settings.
+          LoadTaskSettings(event->TaskIndex);
+          int portNumber = GET_UDP_PORT_P101; // Get default Port from user settings.
           paramPort = portNumber;
         }
 
@@ -340,7 +339,7 @@ boolean Plugin_101(uint8_t function, struct EventStruct *event, String& string)
           msgStr      = wolStr;
           msgStr     += F("Error, MAC Addr Invalid [");
           msgStr     += paramMac;
-          msgStr     += F("]");
+          msgStr     += ']';
           addLogMove(LOG_LEVEL_INFO, msgStr);
         }
 
@@ -350,7 +349,7 @@ boolean Plugin_101(uint8_t function, struct EventStruct *event, String& string)
           msgStr      = wolStr;
           msgStr     += F("Error, IP Addr Invalid [");
           msgStr     += paramIp;
-          msgStr     += F("]");
+          msgStr     += ']';
           addLogMove(LOG_LEVEL_INFO, msgStr);
         }
 
@@ -360,7 +359,7 @@ boolean Plugin_101(uint8_t function, struct EventStruct *event, String& string)
           msgStr      = wolStr;
           msgStr     += F("Error, Port Invalid [");
           msgStr     += paramPort;
-          msgStr     += F("]");
+          msgStr     += ']';
           addLogMove(LOG_LEVEL_INFO, msgStr);
         }
 
@@ -427,10 +426,10 @@ uint8_t safeName(taskIndex_t index) {
     safeCode = NAME_MISSING;
   }
 
-  if (devName == F("reboot")) {
+  if (equals(devName, F("reboot"))) {
     safeCode = NAME_UNSAFE;
   }
-  else if (devName == F("reset")) {
+  else if (equals(devName, F("reset"))) {
     safeCode = NAME_UNSAFE;
   }
 

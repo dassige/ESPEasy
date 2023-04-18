@@ -8,17 +8,21 @@
 //
 //
 
-P127_data_struct::P127_data_struct(int8_t i2caddr)
-  : _i2cAddress(i2caddr) {}
+P127_data_struct::P127_data_struct(const int8_t   i2caddr,
+                                   const uint16_t alt)
+  : _i2cAddress(i2caddr), _alt(alt) {}
 
 // Do all required initialization
-bool P127_data_struct::init(uint16_t alt) {
-  setPowerDown();
-
+bool P127_data_struct::init() {
   // delay required to store config byte to EEPROM, device pulls SCL low
-  delay(100);
+  if (initPhase == P127_initPhases::Undefined) {
+    setPowerDown();
+    timeToWait = 100;
+    initPhase  = P127_initPhases::InitDelay1;
+    return false;
+  }
 
-  uint8_t elev = alt / 10; // Altitude is as 'finegrained' per 10 meter
+  uint8_t elev = _alt / 10; // Altitude is as 'finegrained' per 10 meter
 
   if (elev) {
     setAltitude(elev);
@@ -27,7 +31,12 @@ bool P127_data_struct::init(uint16_t alt) {
   }
 
   // delay required to store config byte to EEPROM, device pulls SCL low
-  delay(100);
+  if (initPhase == P127_initPhases::InitDelay1) {
+    timeToWait = 100;
+    initPhase  = P127_initPhases::InitDelay2;
+    return false;
+  }
+  initPhase = P127_initPhases::Ready; // All done, let's go
 
   // Start reading
   setContinuous();
@@ -36,6 +45,10 @@ bool P127_data_struct::init(uint16_t alt) {
 
 // Check status and read data if not busy
 bool P127_data_struct::checkData() {
+  if (initPhase != P127_initPhases::Ready) {
+    return false;
+  }
+
   uint8_t status = getStatus();
 
   if (!(status & CDM7160_FLAG_BUSY)) {
@@ -50,11 +63,11 @@ uint16_t P127_data_struct::readData() {
 }
 
 uint8_t P127_data_struct::getAltitude() {
-  return I2C_read8_ST_reg(_i2cAddress, CDM7160_REG_HIT);
+  return I2C_read8_reg(_i2cAddress, CDM7160_REG_HIT);
 }
 
 uint8_t P127_data_struct::getCompensation() {
-  return I2C_read8_ST_reg(_i2cAddress, CDM7160_REG_FUNC);
+  return I2C_read8_reg(_i2cAddress, CDM7160_REG_FUNC);
 }
 
 bool P127_data_struct::setPowerDown(void)
@@ -110,7 +123,7 @@ uint8_t P127_data_struct::getStatus()
 // Returns true (1) if successful, false (0) if there was an I2C error
 {
   // Get content of status register
-  return I2C_read8_ST_reg(_i2cAddress, CDM7160_REG_STATUS);
+  return I2C_read8_reg(_i2cAddress, CDM7160_REG_STATUS);
 }
 
 uint16_t P127_data_struct::getCO2()
@@ -119,26 +132,24 @@ uint16_t P127_data_struct::getCO2()
 // Returns the value
 {
   // Get co2 ppm data out of result registers
-  return I2C_read16_LE_ST_reg(_i2cAddress, CDM7160_REG_DATA);
+  return I2C_read16_LE_reg(_i2cAddress, CDM7160_REG_DATA);
 }
 
-// Reads an 8 bit value from a register over I2C, no repeated start
-uint8_t P127_data_struct::I2C_read8_ST_reg(uint8_t i2caddr, byte reg) {
-  Wire.beginTransmission(i2caddr);
-  Wire.write((uint8_t)reg);
-  Wire.endTransmission();
-  Wire.requestFrom(i2caddr, (byte)1);
-  return Wire.read();
-}
+bool P127_data_struct::plugin_fifty_per_second() {
+  if ((initPhase == P127_initPhases::InitDelay1) ||
+      (initPhase == P127_initPhases::InitDelay2)) {
+    timeToWait -= 20; // milliseconds
 
-// Reads a 16 bit value starting at a given register over I2C, no repeated start
-uint16_t P127_data_struct::I2C_read16_LE_ST_reg(uint8_t i2caddr, byte reg) {
-  Wire.beginTransmission(i2caddr);
-  Wire.write((uint8_t)reg);
-  Wire.endTransmission();
-  Wire.requestFrom(i2caddr, (byte)2);
+    // String log = F("CDM7160: remaining wait: ");
+    // log += timeToWait;
+    // addLogMove(LOG_LEVEL_INFO, log);
 
-  return (Wire.read()) | Wire.read() << 8;
+    if (timeToWait <= 0) {
+      timeToWait = 0;
+      init(); // Second/Third part
+    }
+  }
+  return true;
 }
 
 #endif // ifdef USES_P127

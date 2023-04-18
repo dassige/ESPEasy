@@ -1,6 +1,5 @@
 #include "../Helpers/PeriodicalActions.h"
 
-#include "../../ESPEasy_common.h"
 
 #include "../../ESPEasy-Globals.h"
 
@@ -16,6 +15,9 @@
 #include "../ESPEasyCore/ESPEasyRules.h"
 #include "../ESPEasyCore/Serial.h"
 #include "../Globals/ESPEasyWiFiEvent.h"
+#if FEATURE_ETHERNET
+#include "../Globals/ESPEasyEthEvent.h"
+#endif
 #include "../Globals/ESPEasy_Scheduler.h"
 #include "../Globals/ESPEasy_time.h"
 #include "../Globals/EventQueue.h"
@@ -29,6 +31,7 @@
 #include "../Globals/Statistics.h"
 #include "../Globals/WiFi_AP_Candidates.h"
 #include "../Helpers/ESPEasyRTC.h"
+#include "../Helpers/FS_Helper.h"
 #include "../Helpers/Hardware.h"
 #include "../Helpers/Memory.h"
 #include "../Helpers/Misc.h"
@@ -146,24 +149,18 @@ void runOncePerSecond()
     PluginCall(PLUGIN_CLOCK_IN, 0, dummy);
     if (Settings.UseRules)
     {
-      String event;
-      event.reserve(21);
-      event  = F("Clock#Time=");
-      event += node_time.weekday_str();
-      event += ',';
+      // FIXME TD-er: What to do when the system time is not (yet) present?
+      if (node_time.systemTimePresent()) {
+        String event;
+        event.reserve(21);
+        event += F("Clock#Time=");
+        event += node_time.weekday_str();
+        event += ',';
+        event += node_time.getTimeString(':', false);
 
-      if (node_time.hour() < 10) {
-        event += '0';
+        // TD-er: Do not add to the eventQueue, but execute right now.
+        rulesProcessing(event);
       }
-      event += node_time.hour();
-      event += ':';
-
-      if (node_time.minute() < 10) {
-        event += '0';
-      }
-      event += node_time.minute();
-      // TD-er: Do not add to the eventQueue, but execute right now.
-      rulesProcessing(event);
     }
   }
 
@@ -176,9 +173,7 @@ void runOncePerSecond()
   // I2C Watchdog feed
   if (Settings.WDI2CAddress != 0)
   {
-    Wire.beginTransmission(Settings.WDI2CAddress);
-    Wire.write(0xA5);
-    Wire.endTransmission();
+    I2C_write8(Settings.WDI2CAddress, 0xA5);
   }
 
   checkResetFactoryPin();
@@ -204,7 +199,7 @@ void runEach30Seconds()
     log += F(" FreeMem ");
     log += FreeMem();
     bool logWiFiStatus = true;
-    #ifdef HAS_ETHERNET
+    #if FEATURE_ETHERNET
     if(active_network_medium == NetworkMedium_t::Ethernet) {
       logWiFiStatus = false;
       log += F( " EthSpeedState ");
@@ -212,7 +207,7 @@ void runEach30Seconds()
       log += F(" ETH status: ");
       log += EthEventData.ESPEasyEthStatusToString();
     }
-    #endif
+    #endif // if FEATURE_ETHERNET
     if (logWiFiStatus) {
       log += F(" WiFiStatus ");
       log += ArduinoWifiStatusToString(WiFi.status());
@@ -225,18 +220,20 @@ void runEach30Seconds()
     addLogMove(LOG_LEVEL_INFO, log);
   }
   WiFi_AP_Candidates.purge_expired();
+  #if FEATURE_ESPEASY_P2P
   sendSysInfoUDP(1);
   refreshNodeList();
+  #endif
 
   // sending $stats to homie controller
   CPluginCall(CPlugin::Function::CPLUGIN_INTERVAL, 0);
 
   #if defined(ESP8266)
-  #ifdef USES_SSDP
+  #if FEATURE_SSDP
   if (Settings.UseSSDP)
     SSDP_update();
 
-  #endif // USES_SSDP
+  #endif // if FEATURE_SSDP
   #endif
 #if FEATURE_ADC_VCC
   if (!WiFiEventData.wifiConnectInProgress) {
@@ -244,13 +241,13 @@ void runEach30Seconds()
   }
 #endif
 
-  #ifdef FEATURE_REPORTING
+  #if FEATURE_REPORTING
   ReportStatus();
-  #endif
+  #endif // if FEATURE_REPORTING
 
 }
 
-#ifdef USES_MQTT
+#if FEATURE_MQTT
 
 
 void scheduleNextMQTTdelayQueue() {
@@ -289,26 +286,44 @@ void processMQTTdelayQueue() {
   }
 
   START_TIMER;
-  MQTT_queue_element *element(MQTTDelayHandler->getNext());
+  MQTT_queue_element *element(static_cast<MQTT_queue_element *>(MQTTDelayHandler->getNext()));
 
   if (element == nullptr) { return; }
 
-  if (MQTTclient.publish(element->_topic.c_str(), element->_payload.c_str(), element->_retained)) {
-    if (WiFiEventData.connectionFailures > 0) {
-      --WiFiEventData.connectionFailures;
+  bool handled = false;
+
+  if (element->_call_PLUGIN_PROCESS_CONTROLLER_DATA) {
+    struct EventStruct TempEvent(element->_taskIndex);
+    String dummy;
+
+    // FIXME TD-er: Do we need anything from the element in the event?
+//    TempEvent.String1 = element->_topic;
+//    TempEvent.String2 = element->_payload;
+    if (PluginCall(PLUGIN_PROCESS_CONTROLLER_DATA, &TempEvent, dummy)) {
+      handled = true;
+      MQTTDelayHandler->markProcessed(true);
+    } else {
+      MQTTDelayHandler->markProcessed(false);
     }
-    MQTTDelayHandler->markProcessed(true);
-  } else {
-    MQTTDelayHandler->markProcessed(false);
+  } else
+  if (!handled) {
+    if (MQTTclient.publish(element->_topic.c_str(), element->_payload.c_str(), element->_retained)) {
+      if (WiFiEventData.connectionFailures > 0) {
+        --WiFiEventData.connectionFailures;
+      }
+      MQTTDelayHandler->markProcessed(true);
+    } else {
+      MQTTDelayHandler->markProcessed(false);
 #ifndef BUILD_NO_DEBUG
 
-    if (loglevelActiveFor(LOG_LEVEL_DEBUG)) {
-      String log = F("MQTT : process MQTT queue not published, ");
-      log += MQTTDelayHandler->sendQueue.size();
-      log += F(" items left in queue");
-      addLogMove(LOG_LEVEL_DEBUG, log);
-    }
+      if (loglevelActiveFor(LOG_LEVEL_DEBUG)) {
+        String log = F("MQTT : process MQTT queue not published, ");
+        log += MQTTDelayHandler->sendQueue.size();
+        log += F(" items left in queue");
+        addLogMove(LOG_LEVEL_DEBUG, log);
+      }
 #endif // ifndef BUILD_NO_DEBUG
+    }
   }
   Scheduler.setIntervalTimerOverride(ESPEasy_Scheduler::IntervalTimer_e::TIMER_MQTT, 10); // Make sure the MQTT is being processed as soon as possible.
   scheduleNextMQTTdelayQueue();
@@ -372,26 +387,17 @@ void runPeriodicalMQTT() {
   }
 }
 
-// FIXME TD-er: Must move to a more logical part of the code
-controllerIndex_t firstEnabledMQTT_ControllerIndex() {
-  for (controllerIndex_t i = 0; i < CONTROLLER_MAX; ++i) {
-    protocolIndex_t ProtocolIndex = getProtocolIndex_from_ControllerIndex(i);
-    if (validProtocolIndex(ProtocolIndex)) {
-      if (Protocol[ProtocolIndex].usesMQTT && Settings.ControllerEnabled[i]) {
-        return i;
-      }
-    }
-  }
-  return INVALID_CONTROLLER_INDEX;
-}
 
-
-#endif //USES_MQTT
+#endif //if FEATURE_MQTT
 
 
 
 void logTimerStatistics() {
-  uint8_t loglevel = LOG_LEVEL_DEBUG;
+# ifndef BUILD_NO_DEBUG
+  const uint8_t loglevel = LOG_LEVEL_DEBUG;
+#else
+  const uint8_t loglevel = LOG_LEVEL_NONE;
+#endif
   updateLoopStats_30sec(loglevel);
 #ifndef BUILD_NO_DEBUG
 //  logStatistics(loglevel, true);
@@ -436,25 +442,25 @@ void updateLoopStats_30sec(uint8_t loglevel) {
  \*********************************************************************************************/
 void flushAndDisconnectAllClients() {
   if (anyControllerEnabled()) {
-#ifdef USES_MQTT
+#if FEATURE_MQTT
     bool mqttControllerEnabled = validControllerIndex(firstEnabledMQTT_ControllerIndex());
-#endif //USES_MQTT
+#endif //if FEATURE_MQTT
     unsigned long timer = millis() + 1000;
     while (!timeOutReached(timer)) {
       // call to all controllers (delay queue) to flush all data.
       CPluginCall(CPlugin::Function::CPLUGIN_FLUSH, 0);
-#ifdef USES_MQTT      
+#if FEATURE_MQTT      
       if (mqttControllerEnabled && MQTTclient.connected()) {
         MQTTclient.loop();
       }
-#endif //USES_MQTT
+#endif //if FEATURE_MQTT
     }
-#ifdef USES_MQTT
+#if FEATURE_MQTT
     if (mqttControllerEnabled && MQTTclient.connected()) {
       MQTTclient.disconnect();
       updateMQTTclient_connected();
     }
-#endif //USES_MQTT
+#endif //if FEATURE_MQTT
     saveToRTC();
     delay(100); // Flush anything in the network buffers.
   }
@@ -464,9 +470,10 @@ void flushAndDisconnectAllClients() {
 
 void prepareShutdown(ESPEasy_Scheduler::IntendedRebootReason_e reason)
 {
-#ifdef USES_MQTT
+  WiFiEventData.intent_to_reboot = true;
+#if FEATURE_MQTT
   runPeriodicalMQTT(); // Flush outstanding MQTT messages
-#endif // USES_MQTT
+#endif // if FEATURE_MQTT
   process_serialWriteBuffer();
   flushAndDisconnectAllClients();
   saveUserVarToRTC();

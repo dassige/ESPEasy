@@ -1,8 +1,6 @@
 #ifndef ESPEASY_CUSTOM_H
 #define ESPEASY_CUSTOM_H
 
-#include <Arduino.h>
-
 /*
     To modify the stock configuration without changing the EspEasy.ino file :
     1) rename this file to "Custom.h" (It is ignored by Git)
@@ -20,6 +18,15 @@
     But since this Custom.h is included before other defines are made, you don't have to undef a lot of defines.
     Here are some examples:
  */
+
+// --- Feature Flagging ---------------------------------------------------------
+// Can be set to 1 to enable, 0 to disable, or not set to use the default (usually via define_plugin_sets.h)
+
+#define FEATURE_RULES_EASY_COLOR_CODE    1   // Use code highlighting, autocompletion and command suggestions in Rules
+#define FEATURE_ESPEASY_P2P       1     // (1/0) enables the ESP Easy P2P protocol
+#define FEATURE_ARDUINO_OTA       1     //enables the Arduino OTA capabilities
+// #define FEATURE_SD                1     // Enable SD card support
+// #define FEATURE_DOWNLOAD          1     // Enable downloading a file from an url
 
 #ifdef BUILD_GIT
 # undef BUILD_GIT
@@ -86,6 +93,7 @@
 #define DEFAULT_USE_EXTD_CONTROLLER_CREDENTIALS   false                     // true: Allow longer user credentials for controllers
 
 #define DEFAULT_PORT        8080                                            // Enter your Server port value
+#define DEFAULT_CONTROLLER_TIMEOUT  100                                     // Default timeout in msec
 
 #define DEFAULT_PROTOCOL    0                                               // Protocol used for controller communications
                                                                             //   0 = Stand-alone (no controller set)
@@ -99,10 +107,20 @@
                                                                             //   8 = Generic HTTP
                                                                             //   9 = FHEM HTTP
 
+#ifdef ESP8266
 #define DEFAULT_PIN_I2C_SDA                     4
+#endif
+#ifdef ESP32
+#define DEFAULT_PIN_I2C_SDA                     -1                // Undefined
+#endif
+#ifdef ESP8266
 #define DEFAULT_PIN_I2C_SCL                     5
+#endif
+#ifdef ESP32
+#define DEFAULT_PIN_I2C_SCL                     -1                // Undefined
+#endif
 #define DEFAULT_I2C_CLOCK_SPEED                 400000            // Use 100 kHz if working with old I2C chips
-#define USE_I2C_DEVICE_SCAN                     true
+#define FEATURE_I2C_DEVICE_SCAN                 1
 
 #define DEFAULT_SPI                             0                 //0=disabled 1=enabled and for ESP32 there is option 2 =HSPI
 
@@ -116,6 +134,8 @@
 #define DEFAULT_RULES_OLDENGINE                 true
 
 #define DEFAULT_MQTT_RETAIN                     false             // (true|false) Retain MQTT messages?
+#define DEFAULT_CONTROLLER_DELETE_OLDEST              false             // (true|false) to delete oldest message when queue is full
+#define DEFAULT_CONTROLLER_MUST_CHECK_REPLY     false             // (true|false) Check Acknowledgment
 #define DEFAULT_MQTT_DELAY                      100               // Time in milliseconds to retain MQTT messages
 #define DEFAULT_MQTT_LWT_TOPIC                  ""                // Default lwt topic
 #define DEFAULT_MQTT_LWT_CONNECT_MESSAGE        "Connected"       // Default lwt message
@@ -171,24 +191,43 @@
 
 // Allow for remote provisioning of a node.
 // This is only allowed for custom builds.
-// To setup the configuration of the provisioning file, one must also define USE_SETTINGS_ARCHIVE
+// To setup the configuration of the provisioning file, one must also define FEATURE_SETTINGS_ARCHIVE
 // Default setting is to not allow to configure a node remotely, unless explicitly enabled.
-// #define USE_CUSTOM_PROVISIONING
+// #define FEATURE_CUSTOM_PROVISIONING  1
 
-#define USES_SSDP
+#define FEATURE_SSDP  1
 
-#define USE_EXT_RTC                // Support for external RTC clock modules like PCF8563/PCF8523/DS3231/DS1307 
+#define FEATURE_EXT_RTC  1         // Support for external RTC clock modules like PCF8563/PCF8523/DS3231/DS1307 
+
+#define FEATURE_PLUGIN_STATS  1    // Support collecting historic data + computing stats on historic data
+#ifdef ESP8266
+#  define PLUGIN_STATS_NR_ELEMENTS 16
+#endif // ifdef ESP8266
+# ifdef ESP32
+#  define PLUGIN_STATS_NR_ELEMENTS 64
+#endif // ifdef ESP32
+#define FEATURE_CHART_JS  1        // Support for drawing charts, like PluginStats historic data
+
+// Optional alternative CDN links:
+// Chart.js: (only used when FEATURE_CHART_JS is enabled)
+// #define CDN_URL_CHART_JS "https://cdn.jsdelivr.net/npm/chart.js@4.1.2/dist/chart.umd.min.js"
+// JQuery:
+// #define CDN_URL_JQUERY "https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"
 
 
-// #define USE_SETTINGS_ARCHIVE
-// #define FEATURE_I2CMULTIPLEXER
-// #define USE_TRIGONOMETRIC_FUNCTIONS_RULES
+// #define FEATURE_SETTINGS_ARCHIVE 1
+// #define FEATURE_I2CMULTIPLEXER 1
+// #define FEATURE_TRIGONOMETRIC_FUNCTIONS_RULES 1
 // #define PLUGIN_USES_ADAFRUITGFX // Used by Display plugins using Adafruit GFX library
 // #define ADAGFX_ARGUMENT_VALIDATION  0 // Disable argument validation in AdafruitGFX_helper
 // #define ADAGFX_SUPPORT_7COLOR  0 // Disable the support of 7-color eInk displays by AdafruitGFX_helper
+// #define FEATURE_SEND_TO_HTTP 1 // Enable availability of the SendToHTTP command
+// #define FEATURE_POST_TO_HTTP 1 // Enable availability of the PostToHTTP command
+// #define FEATURE_I2C_DEVICE_CHECK 0 // Disable the I2C Device check feature
+// #define FEATURE_I2C_GET_ADDRESS 0 // Disable fetching the I2C address from I2C plugins. Will be enabled when FEATURE_I2C_DEVICE_CHECK is enabled
 
 
-#ifdef USE_CUSTOM_PROVISIONING
+#if FEATURE_CUSTOM_PROVISIONING
 // For device models, see src/src/DataTypes/DeviceModel.h
 // #ifdef ESP32
 //  #define DEFAULT_FACTORY_DEFAULT_DEVICE_MODEL  0 // DeviceModel_default
@@ -204,6 +243,7 @@
 //  #define DEFAULT_PROVISIONING_FETCH_SECURITY     false
 //  #define DEFAULT_PROVISIONING_FETCH_CONFIG       false
 //  #define DEFAULT_PROVISIONING_FETCH_PROVISIONING false
+//  #define DEFAULT_PROVISIONING_FETCH_FIRMWARE     false
 //  #define DEFAULT_PROVISIONING_SAVE_URL           false
 //  #define DEFAULT_PROVISIONING_SAVE_CREDENTIALS   false
 //  #define DEFAULT_PROVISIONING_ALLOW_FETCH_COMMAND false
@@ -214,7 +254,7 @@
 
 
 
-#define USES_SSDP
+#define FEATURE_SSDP  1
 
 /*
  #######################################################################################################
@@ -242,9 +282,11 @@
 
 #define SETUP_PAGE_SHOW_CONFIG_BUTTON    true
 
+// #define FEATURE_AUTO_DARK_MODE           0 // Disable auto-dark mode
 
 //#define WEBPAGE_TEMPLATE_HIDE_HELP_BUTTON
 
+#define SHOW_SYSINFO_JSON 1  //Enables the sysinfo_json page (by default is enabled when WEBSERVER_NEW_UI is enabled too)
 
 /*
  #######################################################################################################
@@ -272,7 +314,7 @@ static const char DATA_ESPEASY_DEFAULT_MIN_CSS[] PROGMEM = {
  #######################################################################################################
  */
 
-// #define USE_NON_STANDARD_24_TASKS
+// #define FEATURE_NON_STANDARD_24_TASKS  1
 
 /*
  #######################################################################################################
@@ -291,7 +333,7 @@ static const char DATA_ESPEASY_DEFAULT_MIN_CSS[] PROGMEM = {
  #######################################################################################################
  */
 
-// #define USE_SERVO
+// #define FEATURE_SERVO  1   // Uncomment and set to 0 to explicitly disable SERVO support
 
 
 // #define USES_P001   // Switch
@@ -372,7 +414,7 @@ static const char DATA_ESPEASY_DEFAULT_MIN_CSS[] PROGMEM = {
 
 // #define USES_P070   // NeoPixel_Clock
 // #define USES_P071   // Kamstrup401
-// #define USES_P072   // HDC1080
+// #define USES_P072   // HDC1000/HDC1008/HDC1010/HDC1050/HDC1080
 // #define USES_P073   // 7DG
 // #define USES_P074   // TSL2591
 // #define USES_P075   // Nextion
@@ -421,23 +463,38 @@ static const char DATA_ESPEASY_DEFAULT_MIN_CSS[] PROGMEM = {
 // #define USES_P115   // MAX1704x
 // #define USES_P116   // ST77xx
 // #define USES_P117   // SCD30
+// #define USES_P118   // Itho
 // #define USES_P119   // ITG3205 Gyro
 // #define USES_P120   // ADXL345 I2C Acceleration / Gravity
 // #define USES_P124   // I2C MultiRelay
 // #define USES_P125   // ADXL345 SPI Acceleration / Gravity
 // #define USES_P126   // 74HC595 Shift register
 // #define USES_P127   // CDM7160
+// #define USES_P129   // 74HC165 Input shiftregisters
+// #define USES_P131   // NeoMatrix
 // #define USES_P132   // INA3221
+// #define USES_P133   // LTR390 UV
+// #define USES_P134   // A02YYUW
+// #define USES_P135   // SCD4x
+// #define P135_FEATURE_RESET_COMMANDS  1 // Enable/Disable quite spacious (~950 bytes) 'selftest' and 'factoryreset' subcommands
+// #define USES_P137   // AXP192
+// #define USES_P138   // IP5306
+// #define USES_P141   // PCD8544 Nokia 5110 LCD
+// #define USES_P143   // I2C Rotary encoders
+// #define P143_FEATURE_INCLUDE_M5STACK      0 // Enabled by default, can be turned off here
+// #define P143_FEATURE_INCLUDE_DFROBOT      0 // Enabled by default, can be turned off here
+// #define P143_FEATURE_COUNTER_COLORMAPPING 0 // Enabled by default, can be turned off here
+
+// #define USES_P128   // NeoPixelBusFX
+// #define P128_USES_GRB  // Default
+// #define P128_USES_GRBW // Select 1 option, only first one enabled from this list will be used
+// #define P128_USES_RGB
+// #define P128_USES_RGBW
+// #define P128_USES_BRG
+// #define P128_USES_RBG
+// #define P128_ENABLE_FAKETV 1 // Enable(1)/Disable(0) FakeTV effect, disabled by default on ESP8266 (.bin size issue), enabled by default on ESP32
 
 
-// Special plugins needing IR library
-// #define USES_P016   // IR
-// #define P016_SEND_IR_TO_CONTROLLER false //IF true then the JSON replay solution is transmited back to the condroller.
-// #define USES_P035   // IRTX
-// #define P016_P035_Extended_AC // The following define is needed for extended decoding of A/C Messages and or using standardised 
-                                 //common arguments for controlling all deeply supported A/C units
-// #define P016_P035_USE_RAW_RAW2 //Use the RAW and RAW2 encodings, disabling it saves 3.7Kb
-// #define USES_P088   // Heatpump IR
 // #define USES_P108   // DDS238-x ZN Modbus energy meters
 
 

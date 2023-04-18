@@ -11,7 +11,6 @@ struct FileType {
     NOTIFICATION_DAT,
     PROVISIONING_DAT,
 
-
     MAX_FILETYPE
   };
 };

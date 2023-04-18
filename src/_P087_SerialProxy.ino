@@ -9,26 +9,39 @@
 // Allows to redirect data to a controller
 //
 
+/**
+ * Changelog:
+ * 2023-03-25 tonhuisman: Change serialproxy_writemix to handle 0x00 also, by implementing parseHexTextData()
+ * 2023-03-22 tonhuisman: Add command serialproxy_writemix to handle mixed hex characters and text to send
+ *                        using parseHexTextString()
+ *                        Format source using Uncrustify
+ * 2022-07-08 tonhuisman: Allow baudrate lowest value to 300 (from 2400)
+ *                        Don't trim off pre/post white-space from string to send
+ * 2022-07-07 tonhuisman: Add selection for serial protocol configuration (databits, parity, nr. of stopbits)
+ * 2022-07 First recorded changelog
+ **/
 
-#include "src/PluginStructs/P087_data_struct.h"
 
-#include <Regexp.h>
+# include "src/PluginStructs/P087_data_struct.h"
 
-#define PLUGIN_087
-#define PLUGIN_ID_087           87
-#define PLUGIN_NAME_087         "Communication - Serial Proxy [TESTING]"
+# include <Regexp.h>
+
+# define PLUGIN_087
+# define PLUGIN_ID_087           87
+# define PLUGIN_NAME_087         "Communication - Serial Proxy"
 
 
-#define P087_BAUDRATE           PCONFIG_LONG(0)
-#define P087_BAUDRATE_LABEL     PCONFIG_LABEL(0)
+# define P087_BAUDRATE           PCONFIG_LONG(0)
+# define P087_BAUDRATE_LABEL     PCONFIG_LABEL(0)
+# define P087_SERIAL_CONFIG      PCONFIG_LONG(1)
 
-#define P087_QUERY_VALUE        0 // Temp placement holder until we know what selectors are needed.
-#define P087_NR_OUTPUT_OPTIONS  1
+# define P087_QUERY_VALUE        0 // Temp placement holder until we know what selectors are needed.
+# define P087_NR_OUTPUT_OPTIONS  1
 
-#define P087_NR_OUTPUT_VALUES   1
-#define P087_QUERY1_CONFIG_POS  3
+# define P087_NR_OUTPUT_VALUES   1
+# define P087_QUERY1_CONFIG_POS  3
 
-#define P087_DEFAULT_BAUDRATE   38400
+# define P087_DEFAULT_BAUDRATE   38400
 
 
 // Plugin settings:
@@ -65,6 +78,7 @@ boolean Plugin_087(uint8_t function, struct EventStruct *event, String& string) 
       Device[deviceCount].SendDataOption     = true;
       Device[deviceCount].TimerOption        = true;
       Device[deviceCount].GlobalSyncOption   = false;
+
       // FIXME TD-er: Not sure if access to any existing task data is needed when saving
       Device[deviceCount].ExitTaskBeforeSave = false;
       break;
@@ -131,8 +145,10 @@ boolean Plugin_087(uint8_t function, struct EventStruct *event, String& string) 
 
     case PLUGIN_WEBFORM_SHOW_SERIAL_PARAMS:
     {
-      addFormNumericBox(F("Baudrate"), P087_BAUDRATE_LABEL, P087_BAUDRATE, 2400, 115200);
+      addFormNumericBox(F("Baudrate"), P087_BAUDRATE_LABEL, P087_BAUDRATE, 300, 115200);
       addUnit(F("baud"));
+      uint8_t serialConfChoice = serialHelper_convertOldSerialConfig(P087_SERIAL_CONFIG);
+      serialHelper_serialconfig_webformLoad(event, serialConfChoice);
       break;
     }
 
@@ -148,7 +164,8 @@ boolean Plugin_087(uint8_t function, struct EventStruct *event, String& string) 
     }
 
     case PLUGIN_WEBFORM_SAVE: {
-      P087_BAUDRATE = getFormItemInt(P087_BAUDRATE_LABEL);
+      P087_BAUDRATE      = getFormItemInt(P087_BAUDRATE_LABEL);
+      P087_SERIAL_CONFIG = serialHelper_serialconfig_webformSave();
 
       P087_data_struct *P087_data =
         static_cast<P087_data_struct *>(getPluginTaskData(event->TaskIndex));
@@ -167,8 +184,8 @@ boolean Plugin_087(uint8_t function, struct EventStruct *event, String& string) 
     }
 
     case PLUGIN_INIT: {
-      const int16_t serial_rx = CONFIG_PIN1;
-      const int16_t serial_tx = CONFIG_PIN2;
+      const int16_t serial_rx      = CONFIG_PIN1;
+      const int16_t serial_tx      = CONFIG_PIN2;
       const ESPEasySerialPort port = static_cast<ESPEasySerialPort>(CONFIG_PORT);
       initPluginTaskData(event->TaskIndex, new (std::nothrow) P087_data_struct());
       P087_data_struct *P087_data =
@@ -178,7 +195,7 @@ boolean Plugin_087(uint8_t function, struct EventStruct *event, String& string) 
         return success;
       }
 
-      if (P087_data->init(port, serial_rx, serial_tx, P087_BAUDRATE)) {
+      if (P087_data->init(port, serial_rx, serial_tx, P087_BAUDRATE, static_cast<uint8_t>(P087_SERIAL_CONFIG))) {
         LoadCustomTaskSettings(event->TaskIndex, P087_data->_lines, P87_Nlines, 0);
         P087_data->post_init();
         success = true;
@@ -207,12 +224,13 @@ boolean Plugin_087(uint8_t function, struct EventStruct *event, String& string) 
     case PLUGIN_READ: {
       P087_data_struct *P087_data =
         static_cast<P087_data_struct *>(getPluginTaskData(event->TaskIndex));
+
       if ((nullptr != P087_data) && P087_data->getSentence(event->String2)) {
         if (Plugin_087_match_all(event->TaskIndex, event->String2)) {
-//          sendData(event);
-#ifndef BUILD_NO_DEBUG
+          //          sendData(event);
+# ifndef BUILD_NO_DEBUG
           addLog(LOG_LEVEL_DEBUG, event->String2);
-#endif
+# endif // ifndef BUILD_NO_DEBUG
           success = true;
         }
       }
@@ -222,18 +240,22 @@ boolean Plugin_087(uint8_t function, struct EventStruct *event, String& string) 
     }
 
     case PLUGIN_WRITE: {
-      String cmd = parseString(string, 1);
+      P087_data_struct *P087_data =
+        static_cast<P087_data_struct *>(getPluginTaskData(event->TaskIndex));
 
+      if ((nullptr != P087_data)) {
+        String cmd = parseString(string, 1);
 
-      if (cmd.equalsIgnoreCase(F("serialproxy_write"))) {
-        P087_data_struct *P087_data =
-          static_cast<P087_data_struct *>(getPluginTaskData(event->TaskIndex));
-
-        if ((nullptr != P087_data)) {
-          String param1 = parseStringKeepCase(string, 2);
-          parseSystemVariables(param1, false);
+        if (equals(cmd, F("serialproxy_write"))) {
+          String param1 = parseStringKeepCase(string, 2, ',', false); // Don't trim off white-space
+          parseSystemVariables(param1, false);                        // FIXME tonhuisman: Doesn't seem to be needed?
           P087_data->sendString(param1);
-          addLogMove(LOG_LEVEL_INFO, param1);
+          addLogMove(LOG_LEVEL_INFO, param1);                         // FIXME tonhuisman: Should we always want to write to the log?
+          success = true;
+        } else
+        if (equals(cmd, F("serialproxy_writemix"))) {
+          std::vector<uint8_t> param1 = parseHexTextData(string);
+          P087_data->sendData(&param1[0], param1.size());
           success = true;
         }
       }
@@ -295,21 +317,27 @@ void P087_html_show_matchForms(struct EventStruct *event) {
     addFormNote(F("0 = Do not turn off filter after sending to the connected device."));
 
     {
-      const __FlashStringHelper * options[P087_Match_Type_NR_ELEMENTS];
+      const __FlashStringHelper *options[P087_Match_Type_NR_ELEMENTS];
       int optionValues[P087_Match_Type_NR_ELEMENTS];
 
       for (int i = 0; i < P087_Match_Type_NR_ELEMENTS; ++i) {
         P087_Match_Type matchType = static_cast<P087_Match_Type>(i);
-        options[i] = P087_data_struct::MatchType_toString(matchType);
+        options[i]      = P087_data_struct::MatchType_toString(matchType);
         optionValues[i] = matchType;
       }
       P087_Match_Type choice = P087_data->getMatchType();
-      addFormSelector(F("Match Type"), getPluginCustomArgName(P087_MATCH_TYPE_POS), P087_Match_Type_NR_ELEMENTS, options, optionValues, choice, false);
+      addFormSelector(F("Match Type"),
+                      getPluginCustomArgName(P087_MATCH_TYPE_POS),
+                      P087_Match_Type_NR_ELEMENTS,
+                      options,
+                      optionValues,
+                      choice,
+                      false);
       addFormNote(F("Capture filter can only be used on Global Match"));
     }
 
 
-    uint8_t lineNr                 = 0;
+    uint8_t lineNr              = 0;
     uint8_t capture             = 0;
     P087_Filter_Comp comparator = P087_Filter_Comp::Equal;
     String filter;
@@ -335,17 +363,17 @@ void P087_html_show_matchForms(struct EventStruct *event) {
         case 1:
         {
           // Comparator
-          const __FlashStringHelper * options[2];
+          const __FlashStringHelper *options[2];
           options[P087_Filter_Comp::Equal]    = F("==");
           options[P087_Filter_Comp::NotEqual] = F("!=");
           int optionValues[2] = { P087_Filter_Comp::Equal, P087_Filter_Comp::NotEqual };
-          addSelector(id, 2, options, optionValues, nullptr, static_cast<int>(comparator), false, true, EMPTY_STRING);
+          addSelector(id, 2, options, optionValues, nullptr, static_cast<int>(comparator), false, true, F(""));
           break;
         }
         case 2:
         {
           // Compare with
-          addTextBox(id, filter, 32, false, false, EMPTY_STRING, EMPTY_STRING);
+          addTextBox(id, filter, 32, false, false, EMPTY_STRING, F(""));
           break;
         }
       }

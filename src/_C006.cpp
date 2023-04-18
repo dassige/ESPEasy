@@ -7,7 +7,6 @@
 
 # include "src/Commands/InternalCommands.h"
 # include "src/ESPEasyCore/Controller.h"
-# include "src/Globals/ExtraTaskSettings.h"
 # include "src/Globals/Settings.h"
 # include "src/Helpers/Network.h"
 # include "src/Helpers/PeriodicalActions.h"
@@ -85,7 +84,7 @@ bool CPlugin_006(CPlugin::Function function, struct EventStruct *event, String& 
 
       String name = topicSplit[4];
 
-      if (name == Settings.Name)
+      if (name.equals(Settings.getName()))
       {
         String cmd = topicSplit[5];
         cmd += ',';
@@ -108,12 +107,16 @@ bool CPlugin_006(CPlugin::Function function, struct EventStruct *event, String& 
 
     case CPlugin::Function::CPLUGIN_PROTOCOL_SEND:
     {
+      if (MQTT_queueFull(event->ControllerIndex)) {
+        break;
+      }
+
       String pubname         = CPlugin_006_pubname;
       bool   mqtt_retainFlag = CPlugin_006_mqtt_retainFlag;
 
       statusLED(true);
 
-      LoadTaskSettings(event->TaskIndex);
+      //LoadTaskSettings(event->TaskIndex); // FIXME TD-er: This can probably be removed
       parseControllerVariables(pubname, event, false);
 
       uint8_t valueCount = getValueCountForTask(event->TaskIndex);
@@ -125,10 +128,12 @@ bool CPlugin_006(CPlugin::Function function, struct EventStruct *event, String& 
 
         // Small optimization so we don't try to copy potentially large strings
         if (event->sensorType == Sensor_VType::SENSOR_TYPE_STRING) {
-          MQTTpublish(event->ControllerIndex, event->TaskIndex, tmppubname.c_str(), event->String2.c_str(), mqtt_retainFlag);
+          if (MQTTpublish(event->ControllerIndex, event->TaskIndex, tmppubname.c_str(), event->String2.c_str(), mqtt_retainFlag))
+            success = true;
         } else {
           String value = formatUserVarNoCheck(event, x);
-          MQTTpublish(event->ControllerIndex, event->TaskIndex, tmppubname.c_str(), value.c_str(), mqtt_retainFlag);
+          if (MQTTpublish(event->ControllerIndex, event->TaskIndex, tmppubname.c_str(), value.c_str(), mqtt_retainFlag))
+            success = true;
         }
       }
       break;

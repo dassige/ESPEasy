@@ -3,22 +3,21 @@
 
 #include "../../ESPEasy_common.h"
 
-
-
-
-struct LabelType;
-
-// enum LabelType::Enum : short;
-
 struct LabelType {
-  enum Enum : short {
+  enum Enum : uint8_t {
     UNIT_NR,
+    #if FEATURE_ZEROFILLED_UNITNUMBER
+    UNIT_NR_0,
+    #endif // FEATURE_ZEROFILLED_UNITNUMBER
     UNIT_NAME,
     HOST_NAME,
 
     LOCAL_TIME,
     TIME_SOURCE,
     TIME_WANDER,
+    #if FEATURE_EXT_RTC
+    EXT_RTC_UTC_TIME,
+    #endif
     UPTIME,
     LOAD_PCT,            // 15.10
     LOOP_COUNT,          // 400
@@ -62,12 +61,18 @@ struct LabelType {
     JSON_BOOL_QUOTES,
     ENABLE_TIMING_STATISTICS,
     ENABLE_RULES_CACHING,
-    ENABLE_RULES_EVENT_REORDER,
+//    ENABLE_RULES_EVENT_REORDER, // TD-er: Disabled for now
     TASKVALUESET_ALL_PLUGINS,
     ALLOW_OTA_UNLIMITED,
     ENABLE_CLEAR_HUNG_I2C_BUS,
+    #if FEATURE_I2C_DEVICE_CHECK
+    ENABLE_I2C_DEVICE_CHECK,
+    #endif // if FEATURE_I2C_DEVICE_CHECK
 #ifndef BUILD_NO_RAM_TRACKER
     ENABLE_RAM_TRACKING,
+#endif
+#if FEATURE_AUTO_DARK_MODE
+    ENABLE_AUTO_DARK_MODE,
 #endif
 
     BOOT_TYPE,               // Cold boot
@@ -87,9 +92,9 @@ struct LabelType {
     IP_ADDRESS_SUBNET,       // 192.168.1.123 / 255.255.255.0
     GATEWAY,                 // 192.168.1.1
     CLIENT_IP,               // 192.168.1.67
-  #ifdef FEATURE_MDNS
+    #if FEATURE_MDNS
     M_DNS,                   // breadboard.local
-  #endif // ifdef FEATURE_MDNS
+    #endif // if FEATURE_MDNS
     DNS,                     // 192.168.1.1 / (IP unset)
     DNS_1,
     DNS_2,
@@ -113,6 +118,8 @@ struct LabelType {
     FORCE_WIFI_NOSLEEP,
     PERIODICAL_GRAT_ARP,
     CONNECTION_FAIL_THRESH,
+    WAIT_WIFI_CONNECT,
+    SDK_WIFI_AUTORECONNECT,
 
     BUILD_DESC,
     GIT_BUILD,
@@ -131,12 +138,16 @@ struct LabelType {
     SYSLOG_LOG_LEVEL,
     SERIAL_LOG_LEVEL,
     WEB_LOG_LEVEL,
-#ifdef FEATURE_SD
+#if FEATURE_SD
     SD_LOG_LEVEL,
-#endif // ifdef FEATURE_SD
+#endif // if FEATURE_SD
 
     ESP_CHIP_ID,
     ESP_CHIP_FREQ,
+#ifdef ESP32
+    ESP_CHIP_XTAL_FREQ,
+    ESP_CHIP_APB_FREQ,
+#endif
     ESP_CHIP_MODEL,
     ESP_CHIP_REVISION,
     ESP_CHIP_CORES,
@@ -158,7 +169,7 @@ struct LabelType {
     MAX_OTA_SKETCH_SIZE,
     OTA_2STEP,
     OTA_POSSIBLE,
-#ifdef HAS_ETHERNET
+#if FEATURE_ETHERNET
     ETH_IP_ADDRESS,
     ETH_IP_SUBNET,
     ETH_IP_ADDRESS_SUBNET,
@@ -170,7 +181,7 @@ struct LabelType {
     ETH_STATE,
     ETH_SPEED_STATE,
     ETH_CONNECTED,
-#endif // ifdef HAS_ETHERNET
+#endif // if FEATURE_ETHERNET
     ETH_WIFI_MODE,
     SUNRISE,
     SUNSET,
@@ -190,11 +201,11 @@ struct LabelType {
 };
 
 
-#ifdef HAS_ETHERNET
+#if FEATURE_ETHERNET
 String getEthSpeed();
 
 String getEthLinkSpeedState();
-#endif // ifdef HAS_ETHERNET
+#endif // if FEATURE_ETHERNET
 
 String getInternalLabel(LabelType::Enum label,
                         char            replaceSpace = '_');

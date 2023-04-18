@@ -12,14 +12,17 @@ on:
     branches-ignore: '**'
     tags: 'mega-*'
 
+permissions:
+  contents: read
+
 jobs:
   generate-matrix:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.x'
       - id: set-matrix
@@ -29,31 +32,31 @@ jobs:
 
   build:
     needs: generate-matrix
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.x'
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-${{ hashFiles('requirements.txt') }}
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         if: ${{ contains(matrix.env, 'esp32') }}
         with:
           path: ~/.platformio
           key: ${{ runner.os }}-esp32-${{ hashFiles('platformio*.ini') }}
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         if: ${{ contains(matrix.env, 'esp8266') }}
         with:
           path: ~/.platformio
           key: ${{ runner.os }}-esp8266-${{ hashFiles('platformio*.ini') }}
       - name: Dependencies
         run: |
-          sudo apt install binutils build-essential libffi-dev python-dev libgit2-dev
+          sudo apt install binutils build-essential libffi-dev libgit2-dev
           pip install -r requirements.txt
           platformio update
       - name: Build and archive
@@ -63,21 +66,22 @@ jobs:
           ENV: ${{ matrix.env }}
         run: |
           python tools/ci/build-and-archive.py
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: Binaries
-          path: ESPEasy_${{ matrix.env }}.zip
+          path: |
+            bin
           if-no-files-found: ignore
 
   prepare-dist:
     needs: build
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.x'
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-docs-${{ hashFiles('docs/requirements.txt') }}
@@ -94,7 +98,7 @@ jobs:
           cd dist
           zip -r -qq ../ESPEasy_dist.zip *
           cd ..
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: Distribution
           path: |
@@ -103,21 +107,21 @@ jobs:
 
   prepare-notes:
     needs: build
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     outputs:
       notes: ${{ steps.release-notes.outputs.result }}
     steps:
       - id: release-notes
-        uses: actions/github-script@v4
+        uses: actions/github-script@v6
         with:
           result-encoding: string
           script: |
-            const tagRefObj = await github.git.getRef({
+            const tagRefObj = await github.rest.git.getRef({
               ...context.repo,
               ref: context.ref.replace('refs/', '')
             });
 
-            const tagObj = await github.git.getTag({
+            const tagObj = await github.rest.git.getTag({
               ...context.repo,
               tag_sha: tagRefObj.data.object.sha
             });
@@ -125,21 +129,39 @@ jobs:
             return tagObj.data.message;
 
   release:
+    permissions:
+      contents: write # for ncipollo/release-action
     needs: [build, prepare-dist, prepare-notes]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.x'
-      - uses: actions/download-artifact@v2
+      - name: Get current date
+        id: date
+        run: |
+          echo "builddate=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+      - uses: actions/download-artifact@v3
         with:
           path: artifacts/
-      - run: |
+      - name: Repackage for release upload
+        run: |
           ls -R
-          sudo apt install zipmerge
-          zipmerge ESPEasy_binaries.zip artifacts/Binaries/*.zip
+          sudo apt install zipmerge zip
+          cd artifacts/Binaries
+          mkdir bin
+          mv *.* bin
+          find . -not -name '*ESP32*' -print | zip -@ ../../ESPEasy_ESP82xx.zip
+          find . -name '*ESP32*' -print | zip -@ ../../ESPEasy_ESP32.zip 
+          cd ../..
+          mv artifacts/Distribution/ESPEasy_dist* .
+          cp ESPEasy_dist.zip ESPEasy_mega_${{ steps.date.outputs.builddate }}_ESP82xx_binaries.zip
+          mv ESPEasy_dist.zip ESPEasy_mega_${{ steps.date.outputs.builddate }}_ESP32_binaries.zip
+          zip -d ESPEasy_mega_${{ steps.date.outputs.builddate }}_ESP32_binaries.zip "ESP.Easy.Flasher.exe" "bin/blank_1MB.bin" "bin/blank_2MB.bin" "bin/ESPEasy_2step_UploaderMega_1024.bin"
+          zipmerge ESPEasy_mega_${{ steps.date.outputs.builddate }}_ESP82xx_binaries.zip ESPEasy_ESP82xx.zip
+          zipmerge ESPEasy_mega_${{ steps.date.outputs.builddate }}_ESP32_binaries.zip ESPEasy_ESP32.zip
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "ESPEasy_binaries.zip,artifacts/Distribution/*.zip"
+          artifacts: "ESPEasy_mega_${{ steps.date.outputs.builddate }}_ESP82xx_binaries.zip,ESPEasy_mega_${{ steps.date.outputs.builddate }}_ESP32_binaries.zip,artifacts/Distribution/*.zip"
           body: ${{ needs.prepare-notes.outputs.notes }}
           token: ${{ secrets.GITHUB_TOKEN }}

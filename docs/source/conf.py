@@ -21,7 +21,7 @@ import sphinx_bootstrap_theme
 # -- Project information -----------------------------------------------------
 
 project = u'ESP Easy'
-copyright = u'2018-2022, ESP Easy'
+copyright = u'2018-2023, ESP Easy'
 author = u'Grovkillen, TD-er & Friends'
 
 # The short X.Y version
@@ -299,11 +299,13 @@ rst_prolog = """
 .. role:: orange
 .. role:: cyan
 .. role:: purple
+.. role:: gray
 
 .. |affiliate| replace:: :yellow:`$` = affiliate links which will give us some money to keep this project running, thank you for using those.
 
 .. |added| replace:: :green:`added`
 .. |improved| replace:: :orange:`improved`
+.. |changed| replace:: :yellow:`changed`
 .. |removed| replace:: :red:`removed`
 .. |fixed| replace:: :purple:`fixed`
 

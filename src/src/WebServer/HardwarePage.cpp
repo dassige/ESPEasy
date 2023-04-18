@@ -1,6 +1,8 @@
 #include "../WebServer/HardwarePage.h"
 
-#include "../WebServer/WebServer.h"
+#ifdef WEBSERVER_HARDWARE
+
+#include "../WebServer/ESPEasy_WebServer.h"
 #include "../WebServer/HTML_wrappers.h"
 #include "../WebServer/Markup.h"
 #include "../WebServer/Markup_Buttons.h"
@@ -17,8 +19,6 @@
 #include "../Helpers/StringConverter.h"
 #include "../Helpers/StringGenerator_GPIO.h"
 
-#ifdef WEBSERVER_HARDWARE
-
 // ********************************************************************************
 // Web Interface hardware page
 // ********************************************************************************
@@ -32,17 +32,21 @@ void handle_hardware() {
   TXBuffer.startStream();
   sendHeadandTail_stdtemplate(_HEAD);
 
-  if (isFormItem(F("psda")))
-  {
+  if (isFormItem(F("pled"))) {
     String error;
     Settings.Pin_status_led           = getFormItemInt(F("pled"));
     Settings.Pin_status_led_Inversed  = isFormItemChecked(F("pledi"));
     Settings.Pin_Reset                = getFormItemInt(F("pres"));
-    Settings.Pin_i2c_sda              = getFormItemInt(F("psda"));
-    Settings.Pin_i2c_scl              = getFormItemInt(F("pscl"));
+    #if FEATURE_PLUGIN_PRIORITY
+    if (!isI2CPriorityTaskActive())
+    #endif //if FEATURE_PLUGIN_PRIORITY
+    {
+      Settings.Pin_i2c_sda            = getFormItemInt(F("psda"));
+      Settings.Pin_i2c_scl            = getFormItemInt(F("pscl"));
+    }
     Settings.I2C_clockSpeed           = getFormItemInt(F("pi2csp"), DEFAULT_I2C_CLOCK_SPEED);
     Settings.I2C_clockSpeed_Slow      = getFormItemInt(F("pi2cspslow"), DEFAULT_I2C_CLOCK_SPEED_SLOW);
-#ifdef FEATURE_I2CMULTIPLEXER
+    #if FEATURE_I2CMULTIPLEXER
     Settings.I2C_Multiplexer_Type     = getFormItemInt(F("pi2cmuxtype"));
     if (Settings.I2C_Multiplexer_Type != I2C_MULTIPLEXER_NONE) {
       Settings.I2C_Multiplexer_Addr   = getFormItemInt(F("pi2cmuxaddr"));
@@ -50,7 +54,7 @@ void handle_hardware() {
       Settings.I2C_Multiplexer_Addr   = -1;
     }
     Settings.I2C_Multiplexer_ResetPin = getFormItemInt(F("pi2cmuxreset"));
-#endif
+    #endif // if FEATURE_I2CMULTIPLEXER
     #ifdef ESP32
       Settings.InitSPI                = getFormItemInt(F("initspi"), static_cast<int>(SPI_Options_e::None));
       if (Settings.InitSPI == static_cast<int>(SPI_Options_e::UserDefined)) { // User-define SPI GPIO pins
@@ -65,7 +69,7 @@ void handle_hardware() {
       Settings.InitSPI                = isFormItemChecked(F("initspi")); // SPI Init
     #endif
     Settings.Pin_sd_cs                = getFormItemInt(F("sd"));
-#ifdef HAS_ETHERNET
+    #if FEATURE_ETHERNET
     Settings.ETH_Phy_Addr             = getFormItemInt(F("ethphy"));
     Settings.ETH_Pin_mdc              = getFormItemInt(F("ethmdc"));
     Settings.ETH_Pin_mdio             = getFormItemInt(F("ethmdio"));
@@ -73,7 +77,7 @@ void handle_hardware() {
     Settings.ETH_Phy_Type             = static_cast<EthPhyType_t>(getFormItemInt(F("ethtype")));
     Settings.ETH_Clock_Mode           = static_cast<EthClockMode_t>(getFormItemInt(F("ethclock")));
     Settings.NetworkMedium            = static_cast<NetworkMedium_t>(getFormItemInt(F("ethwifi")));
-#endif
+    #endif // if FEATURE_ETHERNET
     int gpio = 0;
 
     while (gpio <= MAX_GPIO) {
@@ -110,30 +114,49 @@ void handle_hardware() {
   addFormNote(F("Press about 10s for factory reset"));
 
   addFormSubHeader(F("I2C Interface"));
-  addFormPinSelectI2C(formatGpioName_bidirectional(F("SDA")), F("psda"), Settings.Pin_i2c_sda);
-  addFormPinSelectI2C(formatGpioName_output(F("SCL")),        F("pscl"), Settings.Pin_i2c_scl);
+  #if FEATURE_PLUGIN_PRIORITY
+  if (isI2CPriorityTaskActive()) {
+    int  pinnr = -1;
+    bool input, output, warning = false;
+    addFormNote(F("I2C GPIO pins can't be changed when an I2C Priority task is configured."));
+    addRowLabel(formatGpioName_bidirectional(F("SDA")));
+    getGpioInfo(Settings.Pin_i2c_sda, pinnr, input, output, warning);
+    addHtml(createGPIO_label(Settings.Pin_i2c_sda, pinnr, true, true, false));
+    addRowLabel(formatGpioName_output(F("SCL")));
+    getGpioInfo(Settings.Pin_i2c_scl, pinnr, input, output, warning);
+    addHtml(createGPIO_label(Settings.Pin_i2c_scl, pinnr, true, true, false));
+  } else
+  #endif // if FEATURE_PLUGIN_PRIORITY
+  {
+    addFormPinSelectI2C(formatGpioName_bidirectional(F("SDA")), F("psda"), Settings.Pin_i2c_sda);
+    addFormPinSelectI2C(formatGpioName_output(F("SCL")),        F("pscl"), Settings.Pin_i2c_scl);
+  }
   addFormNumericBox(F("Clock Speed"), F("pi2csp"), Settings.I2C_clockSpeed, 100, 3400000);
   addUnit(F("Hz"));
   addFormNote(F("Use 100 kHz for old I2C devices, 400 kHz is max for most."));
   addFormNumericBox(F("Slow device Clock Speed"), F("pi2cspslow"), Settings.I2C_clockSpeed_Slow, 100, 3400000);
   addUnit(F("Hz"));
-#ifdef FEATURE_I2CMULTIPLEXER
+  #if FEATURE_I2CMULTIPLEXER
   addFormSubHeader(F("I2C Multiplexer"));
   // Select the type of multiplexer to use
   {
-    const __FlashStringHelper * i2c_muxtype_options[5];
-    int    i2c_muxtype_choices[5];
-    i2c_muxtype_options[0] = F("- None -");
-    i2c_muxtype_choices[0] = -1;
-    i2c_muxtype_options[1] = F("TCA9548a - 8 channel");
-    i2c_muxtype_choices[1] = I2C_MULTIPLEXER_TCA9548A;
-    i2c_muxtype_options[2] = F("TCA9546a - 4 channel");
-    i2c_muxtype_choices[2] = I2C_MULTIPLEXER_TCA9546A;
-    i2c_muxtype_options[3] = F("TCA9543a - 2 channel");
-    i2c_muxtype_choices[3] = I2C_MULTIPLEXER_TCA9543A;
-    i2c_muxtype_options[4] = F("PCA9540 - 2 channel (experimental)");
-    i2c_muxtype_choices[4] = I2C_MULTIPLEXER_PCA9540;
-    addFormSelector(F("I2C Multiplexer type"), F("pi2cmuxtype"), 5, i2c_muxtype_options, i2c_muxtype_choices, Settings.I2C_Multiplexer_Type);
+    # define I2C_MULTIPLEXER_OPTIONCOUNT  5 // Nr. of supported devices + 'None'
+    const __FlashStringHelper *i2c_muxtype_options[] = {
+      F("- None -"),
+      F("TCA9548a - 8 channel"),
+      F("TCA9546a - 4 channel"),
+      F("TCA9543a - 2 channel"),
+      F("PCA9540 - 2 channel (experimental)")
+    };
+    const int i2c_muxtype_choices[] = {
+      -1,
+      I2C_MULTIPLEXER_TCA9548A,
+      I2C_MULTIPLEXER_TCA9546A,
+      I2C_MULTIPLEXER_TCA9543A,
+      I2C_MULTIPLEXER_PCA9540
+    };
+    addFormSelector(F("I2C Multiplexer type"), F("pi2cmuxtype"), I2C_MULTIPLEXER_OPTIONCOUNT,
+                    i2c_muxtype_options, i2c_muxtype_choices, Settings.I2C_Multiplexer_Type);
   }
   // Select the I2C address for a port multiplexer
   {
@@ -158,14 +181,19 @@ void handle_hardware() {
   }
   addFormPinSelect(PinSelectPurpose::Generic_output, formatGpioName_output_optional(F("Reset")), F("pi2cmuxreset"), Settings.I2C_Multiplexer_ResetPin);
   addFormNote(F("Will be pulled low to force a reset. Reset is not available on PCA9540."));
-#endif
+  #endif // if FEATURE_I2CMULTIPLEXER
 
   // SPI Init
   addFormSubHeader(F("SPI Interface"));
   #ifdef ESP32
   {
     // Script to show GPIO pins for User-defined SPI GPIOs
-    html_add_script(F("function spiOptionChanged(elem) {var spipinstyle = elem.value == 9 ? '' : 'none';document.getElementById('tr_spipinsclk').style.display = spipinstyle;document.getElementById('tr_spipinmiso').style.display = spipinstyle;document.getElementById('tr_spipinmosi').style.display = spipinstyle;}"),
+    // html_add_script(F("function spiOptionChanged(elem) {var spipinstyle = elem.value == 9 ? '' : 'none';document.getElementById('tr_spipinsclk').style.display = spipinstyle;document.getElementById('tr_spipinmiso').style.display = spipinstyle;document.getElementById('tr_spipinmosi').style.display = spipinstyle;}"),
+    // Minified:
+    html_add_script(F("function spiOptionChanged(e){var i=9==e.value?'':'none';"
+                      "document.getElementById('tr_spipinsclk').style.display=i,"
+                      "document.getElementById('tr_spipinmiso').style.display=i,"
+                      "document.getElementById('tr_spipinmosi').style.display=i}"),
                     false);
     const __FlashStringHelper * spi_options[] = {
       getSPI_optionToString(SPI_Options_e::None), 
@@ -181,7 +209,7 @@ void handle_hardware() {
     addFormSelector_script(F("Init SPI"), F("initspi"), 4, spi_options, spi_index, nullptr, Settings.InitSPI, F("spiOptionChanged(this)"));
     // User-defined pins
     addFormPinSelect(PinSelectPurpose::SPI, formatGpioName_output(F("CLK")),  F("spipinsclk"), Settings.SPI_SCLK_pin);
-    addFormPinSelect(PinSelectPurpose::SPI, formatGpioName_input(F("MISO")),  F("spipinmiso"), Settings.SPI_MISO_pin);
+    addFormPinSelect(PinSelectPurpose::SPI_MISO, formatGpioName_input(F("MISO")),  F("spipinmiso"), Settings.SPI_MISO_pin);
     addFormPinSelect(PinSelectPurpose::SPI, formatGpioName_output(F("MOSI")), F("spipinmosi"), Settings.SPI_MOSI_pin);
     html_add_script(F("document.getElementById('initspi').onchange();"), false); // Initial trigger onchange script
     addFormNote(F("Changing SPI settings requires to press the hardware-reset button or power off-on!"));
@@ -192,12 +220,12 @@ void handle_hardware() {
   #endif
   addFormNote(F("Chip Select (CS) config must be done in the plugin"));
   
-#ifdef FEATURE_SD
+#if FEATURE_SD
   addFormSubHeader(F("SD Card"));
   addFormPinSelect(PinSelectPurpose::Generic_output, formatGpioName_output(F("SD Card CS")), F("sd"), Settings.Pin_sd_cs);
-#endif // ifdef FEATURE_SD
+#endif // if FEATURE_SD
   
-#ifdef HAS_ETHERNET
+#if FEATURE_ETHERNET
   addFormSubHeader(F("Ethernet"));
   addRowLabel_tr_id(F("Preferred network medium"), F("ethwifi"));
   {
@@ -253,7 +281,7 @@ void handle_hardware() {
       };
     addSelector(F("ethclock"), 4, ethClockOptions, nullptr, nullptr, static_cast<int>(Settings.ETH_Clock_Mode), false, true);
   }
-#endif // ifdef HAS_ETHERNET
+#endif // if FEATURE_ETHERNET
 
   addFormSubHeader(F("GPIO boot states"));
 
@@ -272,5 +300,15 @@ void handle_hardware() {
   sendHeadandTail_stdtemplate(_TAIL);
   TXBuffer.endStream();
 }
+
+#if FEATURE_PLUGIN_PRIORITY
+bool isI2CPriorityTaskActive() {
+  bool hasI2CPriorityTask = false;
+  for (taskIndex_t taskIndex = 0; taskIndex < TASKS_MAX && !hasI2CPriorityTask; taskIndex++) {
+    hasI2CPriorityTask |= isPluginI2CPowerManager_from_TaskIndex(taskIndex);
+  }
+  return hasI2CPriorityTask;
+}
+#endif // if FEATURE_PLUGIN_PRIORITY
 
 #endif // ifdef WEBSERVER_HARDWARE

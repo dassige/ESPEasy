@@ -1,5 +1,6 @@
+#####
 Rules
-*****
+#####
 
 Introduction
 ============
@@ -10,16 +11,37 @@ Rules can be used to create very simple flows to control devices on your ESP.
 .. note::
    To assist writing rules, one may prefer to use an editor like Notepad++ which supports user defined languages to colorize the text.
    See the ``Misc/Notepad++`` folder for a Notepad++ language definition which can be used to colorize rules.
+   Another option is the `ESPeasy Code Editor <https://raw.githack.com/chromoxdor/EasyColorCode/main/colorcode.html>`_ , an online editor with rules highlighting and hinting.
 
 Enable Rules
 ------------
 
 To enable rules, :menuselection:`Tools --> Advanced` and check the Rules checkbox.
 
-After clicking Submit, you will find a new page added. Here you can start
-experimenting with Rules:
+After clicking Submit, you will find the Rules tab added. Here you can start experimenting with Rules:
 
-[ADD_GUI_PICTURE]
+.. image:: Advanced_RulesOptions.png
+  :alt: Rules options
+
+* **Rules**: Enable the use of rules. If disabled, also (most) events will no longer be generated, as they won't be processed, though data will still be sent to Controllers.
+* **Enable Rules Cache**: For faster processing of rules they can be (partially) cached in memory. If memory is really low this option can be disabled.
+* **Tolerant last parameter**: A few commands can use, for backward compatibility, a more tolerant handling of the last parameter, as suggested in the note. This feature should be enabled if it is needed.
+
+.. code:: none
+
+  on System#Boot do
+    GPIO,12,0
+    LoopTimerSet,1,10
+  endon
+
+  on Rules#Timer=1 do
+    if [E1SW1#State]=1
+      GPIO,12,0
+    else
+      GPIO,12,1
+    endif
+  endon
+
 
 The example above shows an experiment with a LED, connected via a resistor of
 1k to GPIO12 and to ground.
@@ -63,7 +85,24 @@ Special Notations
 .. note::
  Formulas used in tasks (thus not using the rules) may refer to ``%value%`` for the new current value and ``%pvalue%`` for the previous value before ``PLUGIN_READ`` was called.
  These notations cannot be used in the rules.
- If a previous value is needed, one has to use variables for it.
+ If a previous value in rules is needed, one has to use variables for it.
+
+
+Dot Notation
+^^^^^^^^^^^^
+
+The dot (``.``) can be used to refer to something "belonging" to something else.
+For example calling a command on a specific task (``pulsecounter.resetpulsecounter``) to reset the pulse counter on a specific Pulse Counter task.
+
+(Added: 2022/07/11)
+For task values with "Stats" enabled, one can also access statistical properties of the data or call commands on this statistical data.
+
+For example using just like normal task value data:
+
+* ``[bme#temp.avg]`` Compute the average over the last N samples in the historic buffer (typically: 64 samples on ESP32, 16 on ESP8266)
+
+See :ref:`Task Value Statistics:  <Task Value Statistics>` for more examples.
+
 
 
 Syntax
@@ -155,6 +194,8 @@ consumption of stack space (IRAM). Depending on plug-ins in use this might
 lead to unpredictable, unreliable behavior, advice is not to exceed 3 levels
 of nesting.
 
+To avoid nesting of events, ``AsyncEvent`` can be used, using the same syntax as ``Event``, that will add the event to the end of the current event queue, for processing after other events are completed.
+
 .. code-block:: none
 
    on <trigger> do
@@ -190,7 +231,7 @@ As of mega-201803.. we have the possibility to use AND/OR:
    endon
    
    on test3 do
-     if [test#a]=1 and [test#b]=1 or [test#c]=0
+     if [test#a]=1 and [test#b]=1 or [test#c]=0 // (NB: This should have a pair of round braces in the condition...)
       event,ok
      else
       event,not_ok
@@ -370,6 +411,23 @@ Its value can be referenced like this: ``[bme280#temperature]``.
 This can be used in some plugins like the "OLED Framed" plugin to populate some lines on the display.
 It can also be used in rules. Every occurance of this text will then be replaced by its value.
 
+When having a rule to handle the value of a task, like this:
+
+.. code-block:: none
+
+  on bme#temperature do
+    // do something
+  endon
+
+it is strongly advised to use ``%eventvalue1%`` instead of ``[bme#temperature]``, as the exact value at *the moment that the event was generated* is used, instead of the, possibly already changed value in the task (that *will* be handled in a next generated event).
+
+Similarly, when enabling the **Single event with all values:** option, there are all values available for the task provided to the event as ``%eventvalue1%`` to ``%eventvalue4%`` (actual number of values depending on the Values available at the plugin).
+
+.. code-block:: none
+
+  on bme#all do
+    // Use %eventvalue1% .. %eventvalue3% for Temperature, Humidity and Pressure
+  endon
 
 N.B. these references to task values only yield a value when the task is enabled and its value is valid.
 
@@ -423,6 +481,12 @@ Rules engine specific:
 
 ``%eventvalueN%`` - substitutes the N-th event value (everything that comes after
 the '=' sign).
+
+.. note:: 
+
+  Whenever an event is generated that includes values, these are kept with the event until it is executed. This ensures that when the event is processed, the values *at the moment the event happened* are passed for processing.
+
+  To avoid using 'unexpected' values, especially on for sensors with fast-changing values, it is **strongly advised** to use the ``%eventvalueN%`` variables over the ``[<taskname>#<value>]`` notation that will retrieve the *current* value from the task. A next event will handle the later, updated, values.
 
 For historic reasons, ``%eventvalue%`` without a number, can also be used to access the first event value.
 Thus it will be the same when using ``%eventvalue1%``.
@@ -532,7 +596,7 @@ Sample rules section:
 .. code-block:: none
 
  on remoteTimerControl do
-   timerSet,1,%eventvalue%
+   timerSet,1,%eventvalue1%
  endon
 
 Now send this command to the ESP:
@@ -661,8 +725,27 @@ If none is set, "No variables set" will be shown.
 
 If a specific system variable was never set (using the ``Let`` command), its value will be considered to be ``0.0``.
 
-.. note: Interval variables are lost after a reboot. If you need to keep values that will survive a reboot or crash (without loosing power), please use a dummy task for this.
+.. note:: Internal variables are lost after a reboot. If you need to keep values that will survive a reboot or crash (without losing power), please use a dummy task for this.
 
+
+Task-specific settings
+----------------------
+
+(Added 2022-12-17)
+
+For retrieving some generic task-specific settings, below variables have been added. They can be formatted using the :ref:`Formatting referred values <Formatting values>` options.
+
+``[<TaskName>#settings.enabled]`` to get the enabled/disabled state (1/0) for a specific task (by name only)
+
+``[<TaskName>#settings.interval]`` to get the Interval setting for the named task. Possible range = 0..65535.
+
+``[<TaskName>#settings.valuecount]`` to get the number of values, available in the named task. Range: 0..4. For tasks with a configurable number of values, like the SysInfo plugin, it will return the *currently* set number of values.
+
+``[<TaskName>#settings.controllerN.enabled]`` to get the enabled/disabled state (1/0) for controller N (1..3) of the named task. The controller has to be enabled too, to return an enabled state!
+
+``[<TaskName>#settings.controllerN.idx]`` to get the Idx value for controller N (1..3) of the named task, when supported by that Controller. The controller has to be enabled too, to return an idx!
+
+These settings will be returned independent of the task being enabled or disabled, as that state can be retrieved separately.
 
 
 Special task names
@@ -677,11 +760,18 @@ You must not use the task names ``Plugin``, ``var`` ``int`` as these have specia
 
 ``[Plugin#PCF#Pinstate#N]`` to get the pin state of a PCF pin.
 
+Since 2022-12-27: (Enabled for all builds with flash size > 1MB)
+
+- For GPIO, MCP or PCF pins set to PWM or SERVO output, the last set duty-cycle is returned instead of the current pin state (that was of no use).
+
+- For any plugin that registers the used pin(s), the last set pin state can be retrieved, either regular pin state or PWM state, by using this syntax: ``[Plugin#<pluginId>#Pinstate#N]``. Some plugins that use pin registration are 59 (:ref:`p059_page`), 22 (:ref:`p022_page`), 11 (:ref:`p011_page`) and 63 (:ref:`p063_page`)
+
+
 For expanders you can use also the following:
 
-``[Plugin#MCP#PinRange#x-y]`` to get the pin state of a range of MCP pins from x o y.
+``[Plugin#MCP#PinRange#x-y]`` to get the pin state of a range of MCP pins from x to y.
 
-``[Plugin#PCF#PinRange#x-y]`` to get the pin state of a range of PCF pins from x o y.
+``[Plugin#PCF#PinRange#x-y]`` to get the pin state of a range of PCF pins from x to y.
 
 ``Var`` and ``int`` are used for internal variables. 
 The variables set with the ``Let`` command will be available in rules
@@ -741,8 +831,10 @@ N.B. these extra quotes are removed from the parameter when used, as well as tra
 The reason this behavior was changed from before 2019/11 was that the old implementation could lead to unpredictable results.
 
 
-Formatting refered values
--------------------------
+.. _Formatting values:
+
+Formatting referred values
+--------------------------
 
 When referring another value, some basic formatting can be used.
 
@@ -751,11 +843,11 @@ Referring a value using some pre-defined format: ``[TaskName#ValueName#transform
 Transformation
 ^^^^^^^^^^^^^^
 
-* Transformations are case sensitive. (``M`` differs from ``m``, capital is more verbose)
+* Transformations are case sensitive. (``M`` differs from ``m``, capital is more verbose).
 * Transformations can not be used on "Plugin" calls, like ``[Plugin#GPIO#Pinstate#N]``, since these already use multiple occurences of ``#``.
-* Most transformations work on "binary" values (logic values 0 or 1)
+* Most transformations work on "binary" values (logic values 0 or 1).
 * A "binary" transformation can be "inverted" by adding a leading ``!``.
-* A "binary" value is considered 0 when its string value is "0" or empty, otherwise it is an 1. (float values are rounded)
+* A "binary" value is considered 0 when its string value is "0" or empty, otherwise it is an 1. (float values are rounded).
 * A "binary" value can also be used to detect presence of a string, as it is 0 on an empty string or 1 otherwise.
 * If the transformation contains ``R``, under certain circumstances, the value will be right-aligned.
 
@@ -772,7 +864,7 @@ Binary transformations:
 * ``O``: 0 => "OFF" 1 => " ON"
 * ``U``: 0 => "DOWN" 1 => "  UP"
 * ``u``: 0 => "D" 1 => "U"
-* ``V``: value = value without transformations
+* ``V``: value => value without transformations.
 * ``X``: 0 => "O" 1 => "X"
 * ``Y``: 0 => " NO" 1 => "YES"
 * ``y``: 0 => "N" 1 => "Y"
@@ -780,12 +872,12 @@ Binary transformations:
 
 Floating point transformations:
 
-* ``Dx.y``: Minimal 'x' digits zero filled & 'y' decimal fixed digits. E.g. ``[bme#T#D2.1]``
-* ``Dx``: Minimal 'x' digits zero filled in front of the decimal point, no decimal digits. Same as ``Dx.0``
-* ``D.y``: Same as ``D0.y``
-* ``d``: Same as ``D`` but spaces insted zeros
-* ``F``: Floor (round down)
-* ``E``: cEiling (round up)
+* ``Dx.y``: Minimal 'x' digits zero filled & 'y' decimal fixed digits. E.g. ``[bme#T#D2.1]`` -> value 5.2 will be output as ``05.2``
+* ``Dx``: Minimal 'x' digits zero filled in front of the decimal point, no decimal digits. Same as ``Dx.0``.
+* ``D.y``: Same as ``D0.y``.
+* ``d``: Same as ``D`` transformation but using spaces instead of zeroes.
+* ``F``: Floor (round down).
+* ``E``: cEiling (round up).
 
 Other transformations:
 
@@ -820,7 +912,7 @@ This helps recognize task values (``[taskname#varname]``) in these commands.
 Substring
 ^^^^^^^^^
 
-It is possible to process sub strings, for example when working with ``%eventvalue%`` in rules.
+It is possible to process sub strings, for example when working with ``%eventvalue1%`` in rules.
 
 Usage: ``{substring:<startpos>:<endpos>:<string>}``
 
@@ -831,12 +923,12 @@ For example:
 .. code-block:: none
  
  on DS-1#Temperature do
-   logentry,{substring:0:1:%eventvalue%}
-   logentry,{substring:1:2:%eventvalue%}
-   logentry,{substring:2:3:%eventvalue%}
+   logentry,{substring:0:1:%eventvalue1%}
+   logentry,{substring:1:2:%eventvalue1%}
+   logentry,{substring:2:3:%eventvalue1%}
  endon
 
-The ``%eventvalue%`` may contain the value "23.06"
+The ``%eventvalue1%`` may contain the value "23.06"
 The output in the log will then be:
 
 .. code-block:: none
@@ -853,14 +945,12 @@ The output in the log will then be:
  1512415 : Info  : .
 
 
-N.B. it is also possible to concatenate these and refer to ``{taskname#varname}``.
-
-For example (bit useless example, just for illustrative purposes): 
+For example (bit useless example, just for illustrative purposes):
 
 .. code-block:: none
 
  on DS-1#Temperature do
-   logentry,{substring:0:2:{strtol:16:{substring:0:2:[DS-1#Temperature]}{substring:3:5:[DS-1#Temperature]}}}
+   logentry,{substring:0:2:{strtol:16:{substring:0:2:%eventvalue1%}{substring:3:5:%eventvalue1%}}}
  endon
 
 .. code-block:: none
@@ -873,6 +963,56 @@ For example (bit useless example, just for illustrative purposes):
  221350 : Info  : ACT  : logentry,87
  221351 : Info  : Command: logentry
  221353 : Info  : 87
+
+IndexOf and IndexOf_ci
+^^^^^^^^^^^^^^^^^^^^^^
+
+Determining the position of a substring in a string, using the Arduino ``indexOf()`` function.
+
+Usage:
+
+* ``{indexof:<substring>:<string_to_search_in>[:<offset>]}``  Determine the position of ``substring`` within ``string_to_search_in``, starting from the optional 0-based ``offset``, 0-based result, -1 if not found.
+* ``{indexof_ci:<substring>:<string_to_search_in>[:<offset>]}``  Determine the position of ``substring`` within ``string_to_search_in``, starting from the optional 0-based ``offset``, 0-based result, -1 if not found. This command ignores the character case.
+
+String values containing spaces or commas have to be wrapped in quotes.
+
+Example:
+
+.. code-block:: none
+
+  on HandleCommands#* do // syntax: event,handleCommands#run=parameters
+    if {indexof_ci:run:%eventpar%}=0 // command starts with 'run'
+      LogEntry,'Running command: %eventpar% with arguments: %eventvalue0%'
+      if {indexof:Admin:%eventpar%:3}=3 // command is 'runAdmin', demonstrating the use of an offset, and case-sensitive
+        LogEntry,'Run command as Admin: %eventpar% with arguments: %eventvalue0%'
+      endif
+    endif
+  endon
+
+Equals and Equals_ci
+^^^^^^^^^^^^^^^^^^^^
+
+Compare 2 string values to determine equality, optionally case-insensitive.
+
+Usage:
+
+* ``{equals:<string1>:<string2>``  Compare ``string1`` and ``string2`` for equality, returns 1 for equal and 0 for inequal.
+* ``{equals_ci:<string1>:<string2>``  Compare ``string1`` and ``string2`` for equality, returns 1 for equal and 0 for inequal. Ignore character case.
+
+String values containing spaces or commas have to be wrapped in quotes.
+
+Example:
+
+.. code-block:: none
+
+  on HandleCommands#* do // syntax: event,handleCommands#start=parameters or event,handleCommands#stop=parameters
+    if {equals_ci:start:%eventpar%}=1 and {equals:GO:`%eventvalue1%`} // command is 'start=GO' (eventvalue1 can contain spaces or commas, so quoted using back-ticks)
+      LogEntry,'Starting with arguments: %eventvalue0%'
+    elseif {equals_ci:stop:%eventpar%}=1 // command is 'stop', not case-sensitive
+      LogEntry,'Stopping with arguments: %eventvalue0%'
+    endif
+  endon
+
 
 strtol
 ^^^^^^
@@ -889,8 +1029,8 @@ Example of extracting sub strings from a value and interpreting as if they were 
 .. code-block:: none
 
  on DS-1#Temperature do
-   logentry,{strtol:16:%eventvalue%}
-   logentry,{strtol:16:{substring:3:5:%eventvalue%}}
+   logentry,{strtol:16:%eventvalue1%}
+   logentry,{strtol:16:{substring:3:5:%eventvalue1%}}
  endon
 
 .. code-block:: none
@@ -923,17 +1063,17 @@ The room temperature in this sample is 19.75 C
 
 Get the last four bytes in packs of two bytes:
 
-* ``{substring:13:15:%eventvalue%}``
-* ``{substring:15:17:%eventvalue%}``
+* ``{substring:13:15:%eventvalue1%}``
+* ``{substring:15:17:%eventvalue1%}``
 
 Parsing them to decimal representation each (using a base 16 call to strtol):
 
-* ``{strtol:16:{substring:13:15:%eventvalue%}}``
-* ``{strtol:16:{substring:15:17:%eventvalue%}}``
+* ``{strtol:16:{substring:13:15:%eventvalue1%}}``
+* ``{strtol:16:{substring:15:17:%eventvalue1%}}``
 
 Last but not least the fraction is not correct, it needs to be divided by 256 (and multiplied by 100)
 
-* ``{strtol:16:{substring:15:17:%eventvalue%}}*100/255``
+* ``{strtol:16:{substring:15:17:%eventvalue1%}}*100/255``
 
 Complete rule used to parse this and set a variable in a dummy device:
 
@@ -941,7 +1081,33 @@ Complete rule used to parse this and set a variable in a dummy device:
 
  // Room temperature
  on !Serial#T1018* do
-   TaskValueSet 2,1,{strtol:16:{substring:13:15:%eventvalue%}}.{strtol:16:{substring:15:17:%eventvalue%}}*100/255
+   TaskValueSet 2,1,{strtol:16:{substring:13:15:%eventvalue1%}}.{strtol:16:{substring:15:17:%eventvalue1%}}*100/255
+ endon
+
+
+timeToMin/timeToSec
+^^^^^^^^^^^^^^^^^^^
+
+(Added: 2022-08-09)
+
+Convert a time-string to minutes/seconds.
+
+Usage:
+
+* ``{timeToMin:<startpos>:<endpos>:<string>}`` to convert a string, with hh:mm format, to minutes (0..1439)
+* ``{timeToSec:<startpos>:<endpos>:<string>}`` to convert a string, with hh:mm:ss format, to seconds (0..86399)
+
+The hour (hh), minute (mm) or seconds (ss) values *can* be provided in single-digit values, if applicable.
+
+The position arguments are the same as in Arduino ``String::substring`` , meaning the endpos is 1 position further than the last character you need.
+
+For example:
+
+.. code-block:: none
+ 
+ on Clock#Time=All,**:** do
+   logentry,"Minutes since midnight: {timeToMin:0:5:'%eventvalue2%'}"
+   logentry,"Seconds since midnight: {timeToSec:0:8:'%eventvalue2%:00'}" // Clock#Time doesn't include seconds, so we fake them
  endon
 
 
@@ -996,7 +1162,7 @@ For example:
 
  on DS-1#Temperature do
    logentry,{ord:A}   // ASCII value of 'A'
-   logentry,{ord:{substring:2:3:%eventvalue%}}  // ASCII value of 3rd character of %eventvalue%
+   logentry,{ord:{substring:2:3:%eventvalue1%}}  // ASCII value of 3rd character of %eventvalue1%
  endon
 
 
@@ -1238,6 +1404,7 @@ Basic Math Functions
 * ``sqrt(x)`` Square root of x. (x^0.5)
 * ``sq(x)`` Square of x, x^2.
 * ``round(x)`` Rounds to the nearest integer, but rounds halfway cases away from zero (instead of to the nearest even integer). 
+* ``^`` The caret is used as the exponentiation operator for calculating the value of x to the power of y (x\ :sup:`y`). 
 
 Rules example:
 
@@ -1248,9 +1415,11 @@ Rules example:
    let,2,sqrt([var#1])
    let,3,=log(%eventvalue2%)
    let,4,ln(%eventvalue2%)
+   let,5,%eventvalue1%^%eventvalue2%
    LogEntry,'sqrt of [var#1] = [var#2]'
    LogEntry,'log of %eventvalue2% = [var#3]'
    LogEntry,'ln of %eventvalue2% = [var#4]'   
+   LogEntry,'pow of %eventvalue1%^%eventvalue2% = [var#5]' 
  endon
 
 Called with event ``eventname2=1.234,100``
@@ -1268,6 +1437,8 @@ Called with event ``eventname2=1.234,100``
  213361 : Info   : log of 100 = 2
  213369 : Info   : ACT  : LogEntry,'ln of 100 = 4.60517018598809'
  213374 : Info   : ln of 100 = 4.60517018598809
+ 213379 : Info   : ACT : LogEntry,'pow of 1.234^100 = 1353679866.79107'
+ 213382 : Info   : pow of 1.234^100 = 1353679866.79107
 
 
 
@@ -1449,11 +1620,11 @@ A **10 value average**:
    Let,4,[VAR#3]
    Let,3,[VAR#2]
    Let,2,[VAR#1]
-   Let,1,[Temp#Value]
+   Let,1,%eventvalue1%
    TaskValueSet,12,1,([VAR#1]+[VAR#2]+[VAR#3]+[VAR#4]+[VAR#5]+[VAR#6]+[VAR#7]+[VAR#8]+[VAR#9]+[VAR#10])/10
   EndOn
 
-In the above example we use the sensor value of ``Temp#Value`` to get the trigger event,
+In the above example we use the sensor value of ``Temp#Value`` (available via ``%eventvalue1%``) to get the trigger event,
 we then add all the previous 9 values to the internal variables and the newly acquired
 value to the first variable. We then summarize them and divide them by 10 and store it
 as a dummy variable (example is on task 12, value 1) which we use to publish the sliding
@@ -1465,7 +1636,7 @@ Another filter could be to just use the previous value and **dilute** the new va
 
   On Temp#Value Do
     Let,2,[VAR#1]
-    Let,1,[Temp#Value]
+    Let,1,%eventvalue1%
     TaskValueSet,12,1,(3*[VAR#1]+[VAR#2])/4
   EndOn
 
@@ -1475,7 +1646,7 @@ Yet another filter could be to add the new value to a **summarized average**:
 .. code-block:: none
 
   On Temp#Value Do
-    Let,1,[Temp#Value]
+    Let,1,%eventvalue1%
     TaskValueSet,12,1,([VAR#1]+3*[VAR#2])/4
     Let,2,[Dummy#Value]
   EndOn
@@ -1490,7 +1661,7 @@ PIR and LDR
 
  On PIR#State do
    if [LDR#Light]<500
-     gpio,16,[PIR#State]
+     gpio,16,%eventvalue1%
    endif
  endon
 
@@ -1503,7 +1674,7 @@ PIR and LDR
 
  on PIR#State=1 do
    if [LDR#Light]<500
-     gpio,16,[PIR#State]
+     gpio,16,%eventvalue1%
    endif
  endon
 
@@ -1558,8 +1729,8 @@ Sub-second resolution and loop timers
 Added on 2020/08/12:
 
 * ``timerSet_ms``  To set the timer with msec resolution.
-* ``loopTimerSet`` To create a repeating timer with constant interval.
-* ``loopTimerSet_ms`` Same as ``loopTimerSet``, with msec interval.
+* ``loopTimerSet``  To create a repeating timer with constant interval (seconds).
+* ``loopTimerSet_ms``  Same as ``loopTimerSet``, with msec interval.
 
 Here a small example to show how to start/stop and pause loop timers.
 This can be used to create quite complex timing schemas, especially when
@@ -1666,14 +1837,15 @@ Provided that you also have the valve etc., the plants will be happy.
 SendTo and Publish
 ------------------
 
-With SendTo you can add a Rule to your ESP Easy, capable of sending an event to another unit.
+With SendTo you can add a Rule to your ESP Easy, capable of sending a command to another unit.
 This can be useful in cases where you want to take immediate action.
 There are two flavors:
 - SendTo to send remote unit control commands using the internal peer to peer UDP messaging
-- Publish to send remote commands to other ESP using MQTT broker
+- Publish to send remote commands to (other ESP using) MQTT broker
 
-SendTo:  SendTo <unit>,<command>
+SendTo:  ``SendTo <unit>,<command>``
 
+(Command must be quoted if it contains commas or spaces.)
 
 Imagine you have two ESP Easy modules, ESP#1 and ESP#2
 In the Rules section of ESP#1 you have this:
@@ -1681,8 +1853,10 @@ In the Rules section of ESP#1 you have this:
 .. code-block:: none
 
  on demoEvent do
-   sendTo,2,event,startwatering //(to use the previous example.)
+   sendTo,2,'event,startwatering' //(to use the previous example.)
  endon
+
+(Command must be quoted because it contains commas or spaces.)
 
 And ESP#2 has the rules according to the previous example (givemesomewater)
 
@@ -1699,8 +1873,10 @@ It is also possible to directly order GPIO changes, like:
 .. code-block:: none
 
  on demoEvent do
-   sendTo,2,GPIO,2,1
+   sendTo,2,'GPIO,2,1'
  endon
+
+(Command must be quoted because it contains commas or spaces.)
 
 
 Publish
@@ -1746,7 +1922,7 @@ to make things happen during certain hours of the day:
 
 This will set GPIO 16 to 1 when the PIR is triggered, if the time is
 before 7 in the morning or after 19:00 in the evening
-( useful if you don't have a light sensor).
+(useful if you don't have a light sensor).
 
 SendToHTTP
 ----------
@@ -1770,6 +1946,14 @@ There is the following workaround:
 .. code-block:: none
 
    SendToHTTP 192.168.0.243,8080,/json.htm?type=param=switchlight&command&idx=174&switchcmd=On
+
+Added: 2022/07/23
+
+* ``SendToHTTP`` can now also be called with a full URL starting with ``http://``, so no longer the host, port and uri have to be separated. (it is still possible of course)
+* HTTP return value will be made available as **event** to be evaluated in the rules. Example event: ``http#hostname=404``
+* Calls made to a HTTP server can now also follow redirects. (GET and HEAD calls only) This has to be enabled in Tools->Advanced page.
+* Host name can contain user credentials. For example: ``http://username:pass@hostname:portnr/foo.html``
+* HTTP user credentials now can handle Basic Auth and Digest Auth.
 
 
 Dew Point for temp/humidity sensors (BME280 for example)
@@ -1799,8 +1983,8 @@ For dew point on the 'inside':
 .. code-block:: none
 
  on TempHumidityPressure_INSIDE#%RH do
-  TaskValueSet,7,2,[TempHumidityPressure_INSIDE#°C]-(100-[TempHumidityPressure_INSIDE#%RH])/5  // "7" is the number of the task that the dummy device is on, "2" is its second value where we dump our result
-  if [TempHumidityPressure_INSIDE#%RH]>49
+  TaskValueSet,7,2,[TempHumidityPressure_INSIDE#°C]-(100-%eventvalue1%)/5  // "7" is the number of the task that the dummy device is on, "2" is its second value where we dump our result
+  if %eventvalue1%>49
    Publish,%sysname%/DewPoint_INSIDE/°C,[Dew_point#°C2]
   else
    Publish,%sysname%/DewPoint_INSIDE/°C,[Dew_point#°C2]*  //This asterix shows that the calculation is not correct due to the humidity being below 50%!
@@ -1840,11 +2024,11 @@ just as an example we want to publish these as custom messages with a unique IDX
 .. code-block:: none
 
  on INA219#Amps do
-  Publish domoticz/in,{"idx":123456,"nvalue":0,"svalue":"[INA219#Amps]"} //Own made up IDX 123456
+  Publish domoticz/in,{"idx":123456,"nvalue":0,"svalue":"%eventvalue1%"} //Own made up IDX 123456
  endon
 
  on INA219#Watts do
-  Publish domoticz/in,{"idx":654321,"nvalue":0,"svalue":"[INA219#Watts]"} //Own made up IDX 654321
+  Publish domoticz/in,{"idx":654321,"nvalue":0,"svalue":"%eventvalue1%"} //Own made up IDX 654321
  endon
 
 
@@ -1872,7 +2056,7 @@ It is possible to use authentication in Domoticz and use it via SendToHTTP.
 * MkE= is the base64 encoded username ('2A' in this example)
 * OVM= is the base64 encoded password ('9S' in this example)
 
-``SendToHTTP xx.xx.xx.xx,8080,/json.htm?username=MkE=&password=OVM&type=command&param=switchlight&idx=36&switchcmd=On``
+``SendToHTTP xx.xx.xx.xx,8080,/json.htm?username=MkE=&password=OVM=&type=command&param=switchlight&idx=36&switchcmd=On``
 
 See also `Domoticz Wiki <https://www.domoticz.com/wiki/Domoticz_API/JSON_URL%27s#Authorization>`_
 
@@ -1909,11 +2093,11 @@ Using the pulse counter you can calculate and act on waterflow and changes like 
   TaskValueSet,3,2,0 // TaskValueSet TASKnr,VARnr,Value, Reset the PreviousLiters counter to 0
   TaskValueSet,3,3,0 // TaskValueSet TASKnr,VARnr,Value, Reset the Flow counter to 0
   TaskValueSet,3,4,0 // TaskValueSet TASKnr,VARnr,Value, Reset the PreviousFlow counter to 0
-  TimerSet,1,30 // Set Timer 1 for the next event in 30 seconds
+  LoopTimerSet,1,30 // Set Timer 1 repeating for an event every 30 seconds
  EndOn
 
  On Watermeter#Count do // When Pulse is detected
-  if [Watermeter#Count] > 0
+  if %eventvalue1% > 0
     SendToHTTP,192.168.1.50,8084,/json.htm?type=command&param=udevice&idx=337&nvalue=0&svalue=1
     TaskValueSet,3,3,60000/[Watermeter#Time]
     SendToHTTP,192.168.1.50,8084,/json.htm?type=command&param=udevice&idx=338&nvalue=0&svalue=[Liters#Flow]
@@ -1926,7 +2110,6 @@ Using the pulse counter you can calculate and act on waterflow and changes like 
     TaskValueSet,3,4,[Liters#Flow] // set flow to previous counter
     TaskValueSet,3,3,0
   endif
-    TimerSet,1,30 // Set Timer 1 for the next event in 30 seconds
  Endon
 
 
@@ -1979,5 +2162,147 @@ Therefore the ``asyncevent`` is used to append the events to a queue.
 This can be made much more dynamic as you may trigger a ``taskrun``, which will send an event when new values are read.
 Like this it is possible to automate a complex sequence of steps as not only GPIO pins can be stored, but also task indices.
 
+Validate a RFID tag against a sorted list
+-----------------------------------------
+
+For validating the Tag value, scanned using a RFID reader, it is quite time-consuming to check all, possibly hundreds, values.
+
+To speed up the search process, a b-tree search is much more efficient to find a match.
+
+The pre-requisites are:
+
+* A *sorted* list of accepted tag numbers
+* Enough memory to store the list
+* Configure "Serial Log Level" to ``Error`` (Tools/Advanced page) (logging is quite time-consuming, the script will log minimally on Error level)
+
+Storing a larger number of variables requires quite some memory so the use of an ESP32 is advised for larger tag-lists, 300 tags will need over 5 kB of RAM, and that could be problematic on an ESP8266, up to 100 tags should be achievable on an ESP8266 though.
+
+The list can be initialized calling the ``loadData`` event from ``On System#Boot Do``. This ``loadData`` event should be placed separately in the ``Rules Set 2`` file (or Rules Set 3 or Rules Set 4 if the other file is already used).
+
+.. code-block:: text
+
+  On loadData Do // Sorted by value
+    Let,1000,12345678
+    Let,1001,12345679
+    ....
+    Let,1300,34567890
+
+    Let,999,1300 // The last index used for storing a key (the upper limit for searching)
+  Endon
+
+This will initialize the list. A script can best be used to generate this list, as the values **must** be in sorted order from lowest to highest. Variables numbering is started at 1000, to leave lower numbers available for other script parts. Variable 999 is set to the highest variable number used, and variables 997 and 998 are used internally.
+
+NB: Despite a possible complaint that the filesize exceeds the web editor limit, this will work without problems, assuming a stable WiFi connection.
+
+The next script should be placed at the top of ``Rules Set 1`` as they are called quite often, rules processing starts from Rules Set 1, and stops when the first instance of a rule is handled.
+
+.. code-block:: text
+
+  On checkID Do
+    // %eventvalue1% = key
+    // %eventvalue2% = lower limit index
+    // %eventvalue3% = upper limit index
+  
+    // [int#%v997%] is the key in the middle of our search range
+    Let,997,(%eventvalue2%+%eventvalue3%)/2 // Compute "middle" index
+    Let,998,[int#997]
+    if [int#998] < %eventvalue3%
+      Let,998,[int#998]+1
+    endif
+    
+    // Compute the distance between upper and lower limit
+    let,996,%eventvalue3%-%eventvalue2%
+  
+    If %eventvalue1% = [int#%v997%] or %eventvalue1% = [int#%v998%]
+      // Found it
+      Event,OkTag=%eventvalue1%
+    Else
+      If %eventvalue2%=%eventvalue3% or [int#996]=1
+        // Upper and lower limit are the same
+        // So we have not found the key
+        // No need to continue searching
+      Else
+        // When refering to an index, make sure to use the [int#<n>] notation, not the floating point version.
+        If %eventvalue1% > [int#%v997%]
+          // Check upper half
+          if [int#998] < %eventvalue3%
+            // We already checked #998, so increase its index
+            Let,998,[int#998]+1
+          endif
+          Asyncevent,checkID=%eventvalue1%,[int#998],%eventvalue3%
+        Else
+          // Check lower half
+          if [int#997] > %eventvalue2%
+            // We already checked #997, so decrease its index
+            Let,997,[int#997]-1
+          endif
+          Asyncevent,checkID=%eventvalue1%,%eventvalue2%,[int#997]
+        Endif
+      Endif
+    Endif
+  Endon
+  
+  On Turnstile_out#Tag Do // Out-going reader
+    If %eventvalue1%>0
+      Event,readet=%eventvalue1%
+    Endif
+  Endon
+
+  On Turnstile_in#Tag Do // Incoming reader
+    If %eventvalue1%>0
+      Event,readet=%eventvalue1%
+    Endif
+  Endon
+
+  On readet Do // Valid tag value, now check if accepted
+    // %eventvalue1% = key
+    // 1000  = Lower limit
+    // [int#999] = upper limit
+    Asyncevent,checkID=%eventvalue1%,1000,[int#999]
+  Endon
+
+  On OkTag Do // Matching tag found
+    LogEntry,'Tag %eventvalue1% OK',1 // ERROR log
+    LongPulse,25,0,2 // Activate door-opener on GPIO-25, active low, for 2 seconds
+  Endon
+
+  On System#Boot Do
+    Asyncevent,loadData // Load the sorted tag data
+  Endon
+
+Processing a single tag takes ca. 300 to 500 msec on an ESP32 on a list of ca. 256 tags. For for every *duplication* of the number of tags, an extra 20 to 25 msec is needed for processing.
+
+To find a match, on a list of ca. 256 tags, at most 10 asyncevent calls to checkID will be needed, max. 11 calls when having 512 tags, 12 calls for 1024 tags, etc. But then, the used amount of memory could become somewhat problematic...
+
+To process a list of tags into an ``On loadData Do`` event rule, this small python script can be used.
+
+It will read from file ``tags.txt`` and write to file ``loaddata.txt``:
+
+.. code-block:: python
+
+  # Process file tags.txt to an ESPEasy On loadData Do event
+
+  t = open('tags.txt','r')
+  tags = t.readlines()
+  tags.sort()
+
+  let = 1000
+
+  with open('loaddata.txt','w') as r:
+    r.write('On loadData Do // Sorted by value. Should be loaded from System#Boot event or reloaded manually using command: Asyncevent,loadData\n')
+
+    for rtag in tags:
+      tag = rtag.strip()
+      if tag.isnumeric() and int(tag) > 0: # Ignore non-numeric values, f.e. comments
+        r.write('  Let,')
+        r.write(str(let))
+        r.write(',')
+        r.write(tag)
+        r.write('\n')
+        let = let + 1
+    r.write('\n  Let,999,')
+    r.write(str(let - 1))
+    r.write(' // Last index used\n')
+    r.write('Endon\n')
 
 

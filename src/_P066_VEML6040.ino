@@ -14,7 +14,7 @@
 
 #define PLUGIN_066
 #define PLUGIN_ID_066         66
-#define PLUGIN_NAME_066       "Color - VEML6040 [TESTING]"
+#define PLUGIN_NAME_066       "Color - VEML6040"
 #define PLUGIN_VALUENAME1_066 "R"
 #define PLUGIN_VALUENAME2_066 "G"
 #define PLUGIN_VALUENAME3_066 "B"
@@ -44,6 +44,7 @@ boolean Plugin_066(uint8_t function, struct EventStruct *event, String& string)
       Device[deviceCount].TimerOption        = true;
       Device[deviceCount].TimerOptional      = false;
       Device[deviceCount].GlobalSyncOption   = true;
+      Device[deviceCount].PluginStats        = true;
       break;
     }
 
@@ -73,6 +74,15 @@ boolean Plugin_066(uint8_t function, struct EventStruct *event, String& string)
       }
       break;
     }
+
+    # if FEATURE_I2C_GET_ADDRESS
+    case PLUGIN_I2C_GET_ADDRESS:
+    {
+      event->Par1 = VEML6040_ADDR;
+      success     = true;
+      break;
+    }
+    # endif // if FEATURE_I2C_GET_ADDRESS
 
     case PLUGIN_WEBFORM_LOAD:
     {
@@ -229,7 +239,7 @@ float Plugin_066_CalcCCT(float R, float G, float B)
 
 float Plugin_066_CalcAmbientLight(float G, uint8_t it)
 {
-  float Sensitivity[6] = { 0.25168f, 0.12584f, 0.06292f, 0.03146f, 0.01573f, 0.007865f };
+  float Sensitivity[6] = { 0.25168f, 0.12584f, 0.06292f, 0.03146f, 0.01573f, 0.007865f }; //-V624
 
   return G * Sensitivity[it];
 }
