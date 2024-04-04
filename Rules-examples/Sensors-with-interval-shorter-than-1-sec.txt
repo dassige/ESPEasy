@@ -1,0 +1,41 @@
+on System#Boot do
+ 
+endon
+
+on TaskInit#sensor do
+  event,startSensor1 
+endon
+on TaskInit#echo do
+  event,startSensor2 
+endon
+on startSensor1 do
+  looptimerset_ms,1,200
+endon
+on startSensor2 do
+  looptimerset_ms,2,200
+endon
+
+on Rules#Timer=1 do
+   TaskRun, sensor 
+   [display2].oledframedcmd,1,"Laser: [sensor#distance]"
+endon
+on Rules#Timer=2 do
+   TaskRun, echo
+   [display2].oledframedcmd,2,"Echo: [echo#distance]"
+endon
+
+on [echo#Distance]< 5 do
+   timerPause,2
+   [display2].oledframedcmd,2,"Echo: CLOSE!"
+   timerSet_ms,3,2000
+endon
+on [sensor#Distance]<50 do
+   timerPause,1
+   [display2].oledframedcmd,1,"Laser: CLOSE!"
+   timerSet_ms,3,2000
+endon
+
+on Rules#Timer=3 do
+    timerResume,1
+    timerResume,2
+endon
