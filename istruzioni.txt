@@ -1,1 +1,2 @@
+Default AP password is "configesp"
 Default addres for the setup page when on AP is 192.168.4.1/setup

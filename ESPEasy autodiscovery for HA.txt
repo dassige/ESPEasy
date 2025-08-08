@@ -1,0 +1,38 @@
+#In rules of Espeasy add:
+On MQTT#Connected do
+  PublishR homeassistant/switch/%sysname%/relay/config, '<JSON-BELOW>'
+Endon
+
+# In the espeasy MQTT controller config must enable "Send LWT to broker"
+
+#########################################
+####JSON
+#The json must be on a single line in the rule and between single quotes
+#in the JSON the word 'relay' is the name of the device in the device tab of espeasy that you want to autodiscover. Change accordingly
+
+{
+    "name": "%sysname%_relay",
+    "platform": "switch",
+    "availability_topic": "%sysname%/status/LWT",
+    "payload_available": "Connected",
+    "payload_not_available": "Connection Lost",
+    "device": {
+        "manufacturer": "Unknown",
+        "model": "ESP8266 Wemos D1 Mini",
+		"model_id":"%board_name%",
+		"hw_version": "cpuId: %cpu_id%"
+		"sw_version": "%sysbuild_filename%",
+		"configuration_url":"http://%ip%"
+        "identifiers": [
+            "%sysname%_%mac%"
+        ],
+        "name": "%sysname%"
+    },
+    "unique_id": "%sysname%_%mac%_relay",
+    "state_topic": "%sysname%/relay/State",
+    "state_on": "1",
+    "state_off": "0",
+    "command_topic": "%sysname%/cmd",
+    "payload_on": "event, relayOn",
+    "payload_off": "event, relayOff"
+}

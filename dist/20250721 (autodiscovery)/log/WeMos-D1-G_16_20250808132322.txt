@@ -1,0 +1,28 @@
+######2025-08-08######
+#######0.04.007#######
+######FLASH INFO######
+BIN file: ESP_Easy_mega_20250721_normal_ESP8266_1M.bin
+COM port: (COM8) USB-SERIAL CH340 (Port_#0003.Hub_#0002)
+Baud rate: 115200
+######POST FLASH######
+Unit name: WeMos-D1-G
+Unit number: 16
+Admin password: TopIot!00
+WiFi SSID 1: DGSoft_one
+WiFi password 1: 00!pangolo
+WiFi SSID 2: 
+WiFi password 2: 
+IP: 10.1.1.85
+######FLASH LOG######
+[esptool.exe -vv -cd nodemcu -cb 115200 -cp COM8 -ca 0x00000 -cf "C:\sviluppo\~codeRepo\ESPEasy\dist\20250721 (autodiscovery)\bin\ESP_Easy_mega_20250721_normal_ESP8266_1M.bin"]
+[8/08/2025 13:23:22] esptool v0.4.12 - (c) 2014 Ch. Klippel <ck@atelier-klippel.de>
+[8/08/2025 13:23:22] 	setting board to nodemcu
+[8/08/2025 13:23:22] 	setting baudrate from 115200 to 115200
+[8/08/2025 13:23:22] 	setting port from  to COM8
+[8/08/2025 13:23:22] 	setting address from 0x00000000 to 0x00000000
+[8/08/2025 13:23:22] 	espcomm_upload_file
+[8/08/2025 13:23:22] 	espcomm_upload_mem
+[8/08/2025 13:23:22] error: Failed to open COM8
+[8/08/2025 13:23:22] error: espcomm_open failed
+[8/08/2025 13:23:22] error: espcomm_upload_mem failed
+[2025-08-08 13:23:22] STOPPED due to 3 errors! (try reset on the unit, then start a new flash attempt)
